@@ -61,18 +61,8 @@
     </style>
 </head>
 <body>
-    <div class="controls">
+        <div class="controls">
         <h3>🎂 Birthday Scene Controls</h3>
-        <div class="photo-upload">
-            <label>Photo Frame 1 (Left):</label>
-            <input type="file" id="photo1" accept="image/*" onchange="updatePhotoFrame(0, this)">
-            <label for="photo1" class="upload-btn">Choose Image</label>
-        </div>
-        <div class="photo-upload">
-            <label>Photo Frame 2 (Right):</label>
-            <input type="file" id="photo2" accept="image/*" onchange="updatePhotoFrame(1, this)">
-            <label for="photo2" class="upload-btn">Choose Image</label>
-        </div>
         <div class="photo-upload">
             <label>📍 Real Location Background:</label>
             <input type="file" id="locationImage" accept="image/*" onchange="updateLocationBackground(this)">
@@ -92,7 +82,6 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <!-- FBXLoader dependencies - fflate is required for FBX decompression -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.3/lib/browser.min.js"></script>
     <!-- Load FBXLoader - ensure it attaches to THREE namespace -->
@@ -112,6 +101,17 @@
         })();
     </script>
     <script>
+        // ============================================
+        // CONFIGURATION: Set your GitHub raw URL here
+        // ============================================
+        // Format: https://raw.githubusercontent.com/USERNAME/REPO/BRANCH/PhotoFrame.fbx
+        // Example: https://raw.githubusercontent.com/username/repo/main/PhotoFrame.fbx
+        // 
+        // To use a local file instead, set this to: 'PhotoFrame.fbx'
+        // To use GitHub, replace with your actual GitHub raw URL
+        // ============================================
+        const FBX_FILE_URL = 'PhotoFrame.fbx'; // Change this to your GitHub raw URL
+        
         let scene, camera, renderer, controls;
         let photoFrames = [];
         let locationBackdrop;
@@ -141,26 +141,12 @@
             createTablecloth();
             createSmallTable();
             createRomanticDecor();
+            // Photo frames will load after FBXLoader is ready
+            createPhotoFrames();
             createBirthdayCard();
             createChairs();
             createPeople();
             createCityBackground();
-            
-            // Wait for FBXLoader to be available before creating photo frames
-            function waitForFBXLoader(callback, maxAttempts = 50) {
-                let attempts = 0;
-                const checkLoader = setInterval(() => {
-                    attempts++;
-                    if (typeof THREE.FBXLoader !== 'undefined' || attempts >= maxAttempts) {
-                        clearInterval(checkLoader);
-                        callback();
-                    }
-                }, 100);
-            }
-            
-            waitForFBXLoader(() => {
-                createPhotoFrames();
-            });
             
             animate();
         }
@@ -307,99 +293,81 @@
                 });
             }
 
-            // Check if FBXLoader is available (try both THREE.FBXLoader and global FBXLoader)
-            let FBXLoaderClass = THREE.FBXLoader;
-            if (typeof FBXLoaderClass === 'undefined' && typeof FBXLoader !== 'undefined') {
-                FBXLoaderClass = FBXLoader;
-            }
-            
-            if (typeof FBXLoaderClass === 'undefined') {
-                console.warn('FBXLoader not available, using simple frames');
-                createSimpleFrames();
-                return;
-            }
-
-            console.log('Loading FBX file: PhotoFrame.fbx');
-            const loader = new FBXLoaderClass();
-            
-            // Set up path for loading manager if needed
-            if (loader.setPath) {
-                loader.setPath('./');
-            }
-            
-            loader.load(
-                'PhotoFrame.fbx',
-                function(object) {
-                    console.log('FBX loaded successfully', object);
-                    object.traverse(function(child) {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                            // Ensure materials are properly set
-                            if (child.material) {
-                                child.material.needsUpdate = true;
-                            }
-                        }
-                    });
-
-                    // Calculate bounding box to determine scale
-                    const box = new THREE.Box3().setFromObject(object);
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
-
-                    positions.forEach((pos, index) => {
-                        const frameGroup = object.clone(true);
-                        frameGroup.scale.set(scale, scale, scale);
-
-                        // Add photo plane to frame
-                        const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
-                        const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
-                        photo.position.set(0, 0, 0.2);
-                        photo.userData = { frameIndex: index };
-                        frameGroup.add(photo);
-
-                        frameGroup.position.set(pos.x, 3.2, pos.z);
-                        frameGroup.rotation.y = pos.rotationY;
-
-                        photoFrames.push(frameGroup);
-                        scene.add(frameGroup);
-                    });
-                    console.log('Photo frames created from FBX');
-                },
-                function(progress) {
-                    if (progress.lengthComputable) {
-                        const percentComplete = (progress.loaded / progress.total) * 100;
-                        console.log('Loading FBX: ' + Math.round(percentComplete) + '%');
+            // Wait for FBXLoader to be available
+            function waitForFBXLoader(callback, maxAttempts = 50) {
+                let attempts = 0;
+                const checkLoader = setInterval(() => {
+                    attempts++;
+                    if (typeof THREE.FBXLoader !== 'undefined' || attempts >= maxAttempts) {
+                        clearInterval(checkLoader);
+                        callback();
                     }
-                },
-                function(error) {
-                    console.error('Error loading FBX file:', error);
-                    createSimpleFrames();
-                }
-            );
-        }
-        
-        function updatePhotoFrame(frameIndex, input) {
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const textureLoader = new THREE.TextureLoader();
-                    textureLoader.load(e.target.result, function(texture) {
-                        // Find the photo mesh in the specified frame
-                        const frameGroup = photoFrames[frameIndex];
-                        const photoMesh = frameGroup.children.find(child => child.userData.frameIndex === frameIndex);
-                        
-                        if (photoMesh) {
-                            photoMesh.material.map = texture;
-                            photoMesh.material.needsUpdate = true;
-                        }
-                    });
-                };
-                
-                reader.readAsDataURL(input.files[0]);
+                }, 100);
             }
+            
+            waitForFBXLoader(() => {
+                // Check if FBXLoader is available
+                if (typeof THREE.FBXLoader === 'undefined') {
+                    console.warn('FBXLoader not available, using simple frames');
+                    createSimpleFrames();
+                    return;
+                }
+
+                console.log('Loading FBX file from:', FBX_FILE_URL);
+                const loader = new THREE.FBXLoader();
+                
+                loader.load(
+                    FBX_FILE_URL,
+                    function(object) {
+                        console.log('FBX loaded successfully', object);
+                        object.traverse(function(child) {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                                // Ensure materials are properly set
+                                if (child.material) {
+                                    child.material.needsUpdate = true;
+                                }
+                            }
+                        });
+
+                        // Calculate bounding box to determine scale
+                        const box = new THREE.Box3().setFromObject(object);
+                        const size = box.getSize(new THREE.Vector3());
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
+
+                        positions.forEach((pos, index) => {
+                            const frameGroup = object.clone(true);
+                            frameGroup.scale.set(scale, scale, scale);
+
+                            // Add photo plane to frame if needed
+                            const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
+                            const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
+                            photo.position.set(0, 0, 0.2);
+                            photo.userData = { frameIndex: index };
+                            frameGroup.add(photo);
+
+                            frameGroup.position.set(pos.x, 3.2, pos.z);
+                            frameGroup.rotation.y = pos.rotationY;
+
+                            photoFrames.push(frameGroup);
+                            scene.add(frameGroup);
+                        });
+                        console.log('Photo frames created from FBX');
+                    },
+                    function(progress) {
+                        if (progress.lengthComputable) {
+                            const percentComplete = (progress.loaded / progress.total) * 100;
+                            console.log('Loading FBX: ' + Math.round(percentComplete) + '%');
+                        }
+                    },
+                    function(error) {
+                        console.error('Error loading FBX file:', error);
+                        createSimpleFrames();
+                    }
+                );
+            });
         }
         
         function createChairs() {
