@@ -97,6 +97,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <!-- FBXLoader dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.3/lib/browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
     <script>
         let scene, camera, renderer, controls;
@@ -255,6 +257,7 @@
 
             // Fallback: simple rectangular frames if FBX can't be loaded
             function createSimpleFrames() {
+                console.log('Using simple frames as fallback');
                 const frameMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
                 positions.forEach((pos, index) => {
                     const frameGroup = new THREE.Group();
@@ -278,33 +281,50 @@
                 });
             }
 
+            // Check if FBXLoader is available
             if (typeof THREE.FBXLoader === 'undefined') {
+                console.warn('FBXLoader not available, using simple frames');
                 createSimpleFrames();
                 return;
             }
 
+            console.log('Loading FBX file: PhotoFrame.fbx');
             const loader = new THREE.FBXLoader();
+            
+            // Set up path for loading manager if needed
+            if (loader.setPath) {
+                loader.setPath('./');
+            }
+            
             loader.load(
-                'PhotoFrame.fbx',
+                './PhotoFrame.fbx',
                 function(object) {
+                    console.log('FBX loaded successfully', object);
                     object.traverse(function(child) {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
+                            // Ensure materials are properly set
+                            if (child.material) {
+                                child.material.needsUpdate = true;
+                            }
                         }
                     });
 
-                    const baseFrame = new THREE.Group();
-                    baseFrame.add(object);
-                    // Adjust scale/orientation if needed
-                    baseFrame.scale.set(0.01, 0.01, 0.01);
+                    // Calculate bounding box to determine scale
+                    const box = new THREE.Box3().setFromObject(object);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
 
                     positions.forEach((pos, index) => {
-                        const frameGroup = baseFrame.clone(true);
+                        const frameGroup = object.clone(true);
+                        frameGroup.scale.set(scale, scale, scale);
 
+                        // Add photo plane to frame
                         const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
                         const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
-                        photo.position.set(0, 1, 0.2);
+                        photo.position.set(0, 0, 0.2);
                         photo.userData = { frameIndex: index };
                         frameGroup.add(photo);
 
@@ -314,9 +334,16 @@
                         photoFrames.push(frameGroup);
                         scene.add(frameGroup);
                     });
+                    console.log('Photo frames created from FBX');
                 },
-                undefined,
-                function() {
+                function(progress) {
+                    if (progress.lengthComputable) {
+                        const percentComplete = (progress.loaded / progress.total) * 100;
+                        console.log('Loading FBX: ' + Math.round(percentComplete) + '%');
+                    }
+                },
+                function(error) {
+                    console.error('Error loading FBX file:', error);
                     createSimpleFrames();
                 }
             );
