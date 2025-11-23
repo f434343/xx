@@ -348,12 +348,26 @@
                             // Calculate bounding box to determine scale
                             const box = new THREE.Box3().setFromObject(object);
                             const size = box.getSize(new THREE.Vector3());
+                            const center = box.getCenter(new THREE.Vector3());
                             const maxDim = Math.max(size.x, size.y, size.z);
+                            // Scale to make frames about 2-3 units tall
                             const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
+
+                            // Table top surface is at y = 2.75 (tableTop at y=2.5, height=0.5, so top = 2.5 + 0.25)
+                            const tableTopY = 2.75;
 
                             positions.forEach((pos, index) => {
                                 const frameGroup = object.clone(true);
                                 frameGroup.scale.set(scale, scale, scale);
+
+                                // Calculate bounding box after scaling to find bottom
+                                const scaledBox = new THREE.Box3().setFromObject(frameGroup);
+                                const scaledSize = scaledBox.getSize(new THREE.Vector3());
+                                const scaledMin = scaledBox.min;
+                                
+                                // Calculate Y offset to place bottom of frame on table
+                                const frameBottomY = scaledMin.y;
+                                const yPosition = tableTopY - frameBottomY;
 
                                 // Add photo plane to frame if needed
                                 const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
@@ -362,7 +376,8 @@
                                 photo.userData = { frameIndex: index };
                                 frameGroup.add(photo);
 
-                                frameGroup.position.set(pos.x, 3.2, pos.z);
+                                // Position frame on table surface
+                                frameGroup.position.set(pos.x, yPosition, pos.z);
                                 frameGroup.rotation.y = pos.rotationY;
 
                                 photoFrames.push(frameGroup);
