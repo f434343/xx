@@ -349,6 +349,8 @@
                             const box = new THREE.Box3().setFromObject(object);
                             const size = box.getSize(new THREE.Vector3());
                             const center = box.getCenter(new THREE.Vector3());
+                            const min = box.min;
+                            const max = box.max;
                             const maxDim = Math.max(size.x, size.y, size.z);
                             // Scale to make frames about 2-3 units tall
                             const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
@@ -360,15 +362,6 @@
                                 const frameGroup = object.clone(true);
                                 frameGroup.scale.set(scale, scale, scale);
 
-                                // Calculate bounding box after scaling to find bottom
-                                const scaledBox = new THREE.Box3().setFromObject(frameGroup);
-                                const scaledSize = scaledBox.getSize(new THREE.Vector3());
-                                const scaledMin = scaledBox.min;
-                                
-                                // Calculate Y offset to place bottom of frame on table
-                                const frameBottomY = scaledMin.y;
-                                const yPosition = tableTopY - frameBottomY;
-
                                 // Add photo plane to frame if needed
                                 const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
                                 const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
@@ -376,12 +369,22 @@
                                 photo.userData = { frameIndex: index };
                                 frameGroup.add(photo);
 
+                                // Calculate the bottom of the frame in local space (before positioning)
+                                // The bottom is at min.y in the object's local coordinate system
+                                const localBottomY = min.y * scale;
+                                
+                                // Position frame so its bottom sits on the table
+                                // We need to offset by the local bottom position
+                                const yPosition = tableTopY - localBottomY;
+
                                 // Position frame on table surface
                                 frameGroup.position.set(pos.x, yPosition, pos.z);
                                 frameGroup.rotation.y = pos.rotationY;
 
                                 photoFrames.push(frameGroup);
                                 scene.add(frameGroup);
+                                
+                                console.log(`Frame ${index} positioned at y=${yPosition}, table top at y=${tableTopY}, local bottom=${localBottomY}`);
                             });
                             console.log('Photo frames created from FBX');
                         },
