@@ -348,9 +348,6 @@
                             // Calculate bounding box to determine scale
                             const box = new THREE.Box3().setFromObject(object);
                             const size = box.getSize(new THREE.Vector3());
-                            const center = box.getCenter(new THREE.Vector3());
-                            const min = box.min;
-                            const max = box.max;
                             const maxDim = Math.max(size.x, size.y, size.z);
                             // Scale to make frames about 2-3 units tall
                             const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
@@ -369,13 +366,9 @@
                                 photo.userData = { frameIndex: index };
                                 frameGroup.add(photo);
 
-                                // Calculate the bottom of the frame in local space (before positioning)
-                                // The bottom is at min.y in the object's local coordinate system
-                                const localBottomY = min.y * scale;
-                                
-                                // Position frame so its bottom sits on the table
-                                // We need to offset by the local bottom position
-                                const yPosition = tableTopY - localBottomY;
+                                // Use a simple fixed Y position on the table
+                                // Table top is at y=2.75, so position frames at y=3.0 to be clearly visible
+                                const yPosition = 3.0;
 
                                 // Position frame on table surface
                                 frameGroup.position.set(pos.x, yPosition, pos.z);
@@ -384,7 +377,7 @@
                                 photoFrames.push(frameGroup);
                                 scene.add(frameGroup);
                                 
-                                console.log(`Frame ${index} positioned at y=${yPosition}, table top at y=${tableTopY}, local bottom=${localBottomY}`);
+                                console.log(`Frame ${index}: x=${pos.x}, y=${yPosition.toFixed(2)}, z=${pos.z}, scale=${scale.toFixed(4)}, frame height=${scaledSize.y.toFixed(2)}, table top=${tableTopY}`);
                             });
                             console.log('Photo frames created from FBX');
                         },
