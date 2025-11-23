@@ -97,9 +97,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-    <!-- FBXLoader dependencies -->
+    <!-- FBXLoader dependencies - fflate is required for FBX decompression -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.3/lib/browser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <!-- Load FBXLoader - ensure it attaches to THREE namespace -->
+    <script>
+        // Load FBXLoader and ensure it's available
+        (function() {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js';
+            script.onload = function() {
+                // Ensure FBXLoader is attached to THREE if it's not already
+                if (typeof THREE !== 'undefined' && typeof FBXLoader !== 'undefined' && typeof THREE.FBXLoader === 'undefined') {
+                    THREE.FBXLoader = FBXLoader;
+                }
+                console.log('FBXLoader loaded, available:', typeof THREE.FBXLoader !== 'undefined');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
     <script>
         let scene, camera, renderer, controls;
         let photoFrames = [];
@@ -130,11 +145,26 @@
             createTablecloth();
             createSmallTable();
             createRomanticDecor();
-            createPhotoFrames();
             createBirthdayCard();
             createChairs();
             createPeople();
             createCityBackground();
+            
+            // Wait for FBXLoader to be available before creating photo frames
+            function waitForFBXLoader(callback, maxAttempts = 50) {
+                let attempts = 0;
+                const checkLoader = setInterval(() => {
+                    attempts++;
+                    if (typeof THREE.FBXLoader !== 'undefined' || attempts >= maxAttempts) {
+                        clearInterval(checkLoader);
+                        callback();
+                    }
+                }, 100);
+            }
+            
+            waitForFBXLoader(() => {
+                createPhotoFrames();
+            });
             
             animate();
         }
@@ -281,15 +311,20 @@
                 });
             }
 
-            // Check if FBXLoader is available
-            if (typeof THREE.FBXLoader === 'undefined') {
+            // Check if FBXLoader is available (try both THREE.FBXLoader and global FBXLoader)
+            let FBXLoaderClass = THREE.FBXLoader;
+            if (typeof FBXLoaderClass === 'undefined' && typeof FBXLoader !== 'undefined') {
+                FBXLoaderClass = FBXLoader;
+            }
+            
+            if (typeof FBXLoaderClass === 'undefined') {
                 console.warn('FBXLoader not available, using simple frames');
                 createSimpleFrames();
                 return;
             }
 
             console.log('Loading FBX file: PhotoFrame.fbx');
-            const loader = new THREE.FBXLoader();
+            const loader = new FBXLoaderClass();
             
             // Set up path for loading manager if needed
             if (loader.setPath) {
@@ -297,7 +332,7 @@
             }
             
             loader.load(
-                './PhotoFrame.fbx',
+                'PhotoFrame.fbx',
                 function(object) {
                     console.log('FBX loaded successfully', object);
                     object.traverse(function(child) {
