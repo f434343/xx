@@ -83,22 +83,17 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
         <!-- FBXLoader dependencies - fflate is required for FBX decompression -->
-        <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.3/lib/browser.min.js"></script>
-        <!-- Load FBXLoader - ensure it attaches to THREE namespace -->
+        <!-- Load fflate first - required for FBX decompression (using UMD build) -->
+        <script src="https://unpkg.com/fflate@0.7.4/umd/index.js"></script>
+        <!-- Load FBXLoader after fflate -->
+        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
         <script>
-            // Load FBXLoader and ensure it's available
-            (function() {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js';
-                script.onload = function() {
-                    // Ensure FBXLoader is attached to THREE if it's not already
-                    if (typeof THREE !== 'undefined' && typeof FBXLoader !== 'undefined' && typeof THREE.FBXLoader === 'undefined') {
-                        THREE.FBXLoader = FBXLoader;
-                    }
-                    console.log('FBXLoader loaded, available:', typeof THREE.FBXLoader !== 'undefined');
-                };
-                document.head.appendChild(script);
-            })();
+            // Ensure FBXLoader is attached to THREE namespace
+            if (typeof THREE !== 'undefined' && typeof FBXLoader !== 'undefined' && typeof THREE.FBXLoader === 'undefined') {
+                THREE.FBXLoader = FBXLoader;
+            }
+            console.log('fflate available:', typeof fflate !== 'undefined');
+            console.log('FBXLoader available:', typeof THREE.FBXLoader !== 'undefined');
         </script>
         <script>
             // ============================================
