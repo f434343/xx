@@ -10,9 +10,12 @@
                 padding: 0;
                 overflow: hidden;
                 background: #000;
+                font-family: 'Arial', sans-serif;
             }
             canvas {
                 display: block;
+                width: 100vw;
+                height: 100vh;
             }
             .controls {
                 position: absolute;
@@ -52,6 +55,15 @@
                 text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
                 letter-spacing: 1px;
                 z-index: 60;
+            }
+            @media (max-width: 600px) {
+                .name-label {
+                    font-size: 14px;
+                }
+                .date-banner {
+                    font-size: 22px;
+                    top: 6px;
+                }
             }
             .controls h3 {
                 margin: 0 0 10px 0;
