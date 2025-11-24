@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>3D Birthday Scene</title>
+        <title>A + S</title>
         <style>
             body {
                 margin: 0;
@@ -23,6 +23,35 @@
                 border-radius: 10px;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.3);
                 z-index: 100;
+            }
+            .name-label {
+                position: absolute;
+                font-family: 'Arial', sans-serif;
+                font-size: 18px;
+                font-weight: bold;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+                pointer-events: none;
+                z-index: 50;
+                transform: translate(-50%, -50%);
+            }
+            .name-label.adem {
+                color: #ff69b4;
+            }
+            .name-label.sama {
+                color: #dc143c;
+            }
+            .date-banner {
+                position: absolute;
+                top: 10px;
+                left: 50%;
+                transform: translateX(-50%);
+                font-family: 'Arial', sans-serif;
+                font-size: 28px;
+                font-weight: bold;
+                color: #ffe6f0;
+                text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+                letter-spacing: 1px;
+                z-index: 60;
             }
             .controls h3 {
                 margin: 0 0 10px 0;
@@ -61,55 +90,80 @@
         </style>
     </head>
     <body>
-            <div class="controls">
-            <h3>🎂 Birthday Scene Controls</h3>
-            <div class="photo-upload">
-                <label>📍 Real Location Background:</label>
-                <input type="file" id="locationImage" accept="image/*" onchange="updateLocationBackground(this)">
-                <label for="locationImage" class="upload-btn">Upload Jungfrusgata 414, Handen</label>
-            </div>
-            <div class="photo-upload">
-                <label>🗺️ Get Real Location:</label>
-                <button class="upload-btn" onclick="openGoogleMaps()">Open Google Maps</button>
-            </div>
-            <div class="instructions">
-                🖱️ Left click + drag to rotate<br>
-                🖱️ Right click + drag to pan<br>
-                🖱️ Scroll to zoom in/out<br>
-                📍 Upload a real photo of Jungfrusgata 414, Handen
-            </div>
-        </div>
+        <!-- Name Labels -->
+        <div id="adem-label" class="name-label adem">Adem</div>
+        <div id="sama-label" class="name-label sama">Säma</div>
+        <div id="dateBanner" class="date-banner">Date</div>
         
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-        <!-- FBXLoader dependencies - fflate is required for FBX decompression -->
-        <!-- Load fflate first - required for FBX decompression (using UMD build) -->
-        <script src="https://unpkg.com/fflate@0.7.4/umd/index.js"></script>
-        <!-- Load FBXLoader after fflate -->
-        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+        
+        <!-- Multiple CDN fallbacks for OrbitControls -->
         <script>
-            // Ensure FBXLoader is attached to THREE namespace
-            if (typeof THREE !== 'undefined' && typeof FBXLoader !== 'undefined' && typeof THREE.FBXLoader === 'undefined') {
-                THREE.FBXLoader = FBXLoader;
-            }
-            console.log('fflate available:', typeof fflate !== 'undefined');
-            console.log('FBXLoader available:', typeof THREE.FBXLoader !== 'undefined');
+            (function loadOrbitControls() {
+                const scripts = [
+                    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+                    'https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js'
+                ];
+                
+                function loadScript(index) {
+                    if (index >= scripts.length) {
+                        console.warn('Could not load OrbitControls from any CDN');
+                        return;
+                    }
+                    
+                    const script = document.createElement('script');
+                    script.src = scripts[index];
+                    script.onload = () => console.log('OrbitControls loaded from:', scripts[index]);
+                    script.onerror = () => loadScript(index + 1);
+                    document.head.appendChild(script);
+                }
+                
+                loadScript(0);
+            })();
+        </script>
+        
+                <script>
+            // Debug: Check if dependencies are loaded
+            console.log('THREE available:', typeof THREE !== 'undefined');
+            console.log('OrbitControls available:', typeof THREE.OrbitControls !== 'undefined');
         </script>
         <script>
-            // ============================================
-            // CONFIGURATION: Set your GitHub raw URL here
-            // ============================================
-            // Format: https://raw.githubusercontent.com/USERNAME/REPO/BRANCH/PhotoFrame.fbx
-            // Example: https://raw.githubusercontent.com/username/repo/main/PhotoFrame.fbx
-            // 
-            // To use a local file instead, set this to: 'PhotoFrame.fbx'
-            // To use GitHub, replace with your actual GitHub raw URL
-            // ============================================
-            const FBX_FILE_URL = 'https://raw.githubusercontent.com/f434343/xx/main/PhotoFrame.fbx'; // Change this to your GitHub raw URL
-            
+                        
             let scene, camera, renderer, controls;
-            let photoFrames = [];
             let locationBackdrop;
+            let raycaster, mouse;
+            
+            // Wait for all dependencies to load before initializing
+            function waitForDependencies(callback) {
+                let attempts = 0;
+                const maxAttempts = 100; // 10 seconds max wait
+                
+                const checkDependencies = () => {
+                    attempts++;
+                    
+                    const threeLoaded = typeof THREE !== 'undefined';
+                    const orbitControlsLoaded = typeof THREE.OrbitControls !== 'undefined';
+                    
+                    console.log(`Dependency check ${attempts}:`, {
+                        three: threeLoaded,
+                        orbitControls: orbitControlsLoaded
+                    });
+                    
+                    if (threeLoaded && orbitControlsLoaded) {
+                        console.log('All dependencies loaded, initializing scene...');
+                        callback();
+                    } else if (attempts >= maxAttempts) {
+                        console.error('Dependencies failed to load in time. Initializing with fallbacks...');
+                        // Initialize anyway - the code has fallbacks for missing dependencies
+                        callback();
+                    } else {
+                        setTimeout(checkDependencies, 100);
+                    }
+                };
+                
+                checkDependencies();
+            }
             
             function init() {
                 scene = new THREE.Scene();
@@ -123,7 +177,8 @@
                 renderer.shadowMap.enabled = true;
                 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 document.body.appendChild(renderer.domElement);
-                
+
+                                
                 // Add orbit controls
                 controls = new THREE.OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
@@ -136,9 +191,6 @@
                 createTablecloth();
                 createSmallTable();
                 createRomanticDecor();
-                // Photo frames will load after FBXLoader is ready
-                createPhotoFrames();
-                createBirthdayCard();
                 createChairs();
                 createPeople();
                 createCityBackground();
@@ -147,22 +199,44 @@
             }
             
             function createLighting() {
-                // Ambient light
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+                // Soft romantic ambient light with pink tint
+                const ambientLight = new THREE.AmbientLight(0xffe6f0, 0.4);
                 scene.add(ambientLight);
                 
-                // Main warm light from above
-                const mainLight = new THREE.DirectionalLight(0xffd4a3, 1);
+                // Main warm romantic light from above with golden-pink hue
+                const mainLight = new THREE.DirectionalLight(0xffb3d9, 1.2);
                 mainLight.position.set(5, 20, 5);
                 mainLight.castShadow = true;
                 mainLight.shadow.mapSize.width = 2048;
                 mainLight.shadow.mapSize.height = 2048;
                 scene.add(mainLight);
                 
-                // City lights glow
-                const cityLight = new THREE.DirectionalLight(0x4a90e2, 0.5);
+                // Romantic pink point lights for candle-like ambiance
+                const romanticLight1 = new THREE.PointLight(0xff69b4, 0.8, 15);
+                romanticLight1.position.set(-3, 3, 0);
+                scene.add(romanticLight1);
+                
+                const romanticLight2 = new THREE.PointLight(0xff1493, 0.8, 15);
+                romanticLight2.position.set(3, 3, 0);
+                scene.add(romanticLight2);
+                
+                // Soft red accent light for passion
+                const passionLight = new THREE.PointLight(0xdc143c, 0.3, 10);
+                passionLight.position.set(0, 2.5, -2);
+                scene.add(passionLight);
+                
+                // City lights glow with romantic purple tint
+                const cityLight = new THREE.DirectionalLight(0x9370db, 0.4);
                 cityLight.position.set(-10, 10, -20);
                 scene.add(cityLight);
+                
+                // Add subtle spotlight effect on the table center
+                const spotlight = new THREE.SpotLight(0xffb3d9, 0.6);
+                spotlight.position.set(0, 8, 0);
+                spotlight.angle = Math.PI / 6;
+                spotlight.penumbra = 0.3;
+                spotlight.castShadow = true;
+                scene.add(spotlight);
             }
             
             function createTablecloth() {
@@ -172,12 +246,24 @@
                 canvas.height = 512;
                 const context = canvas.getContext('2d');
                 
-                // Create checkered pattern
+                // Create romantic pattern with hearts and soft colors
                 const squareSize = 32;
                 for (let i = 0; i < 16; i++) {
                     for (let j = 0; j < 16; j++) {
-                        context.fillStyle = (i + j) % 2 === 0 ? '#ffffff' : '#ff69b4';
+                        // Alternate between soft pink, white, and rose colors
+                        const colors = ['#ffe6f0', '#ffffff', '#ffb3d9', '#ff69b4'];
+                        const colorIndex = (i + j) % colors.length;
+                        context.fillStyle = colors[colorIndex];
                         context.fillRect(i * squareSize, j * squareSize, squareSize, squareSize);
+                        
+                        // Add small heart pattern on some squares
+                        if ((i + j) % 3 === 0) {
+                            context.fillStyle = 'rgba(255, 20, 147, 0.3)';
+                            context.font = '16px Arial';
+                            context.textAlign = 'center';
+                            context.textBaseline = 'middle';
+                            context.fillText('♥', i * squareSize + squareSize/2, j * squareSize + squareSize/2);
+                        }
                     }
                 }
                 
@@ -193,29 +279,30 @@
             function createSmallTable() {
                 const tableGroup = new THREE.Group();
                 
-                // Small table top
-                const tableTopGeometry = new THREE.BoxGeometry(12, 0.5, 8);
+                // Tabletop - raise to match taller legs
+                const tableTopGeometry = new THREE.BoxGeometry(8, 0.5, 4);
                 const tableTopMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
                 const tableTop = new THREE.Mesh(tableTopGeometry, tableTopMaterial);
-                tableTop.position.y = 2.5;
+                tableTop.position.set(0, 2.75, 0); // Raised to sit on taller legs
                 tableTop.castShadow = true;
+                tableTop.receiveShadow = true;
                 tableGroup.add(tableTop);
                 
-                // Table legs
-                const legGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3);
+                // Table legs - extend further downward (taller from the bottom)
+                const legGeometry = new THREE.BoxGeometry(0.3, 3.75, 0.3); // Taller legs extending downward
                 const legMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
                 
                 const legPositions = [
-                    { x: -5, z: -3 },
-                    { x: 5, z: -3 },
-                    { x: -5, z: 3 },
-                    { x: 5, z: 3 }
+                    { x: -3.5, z: -1.5 },
+                    { x: 3.5, z: -1.5 },
+                    { x: -3.5, z: 1.5 },
+                    { x: 3.5, z: 1.5 }
                 ];
                 
                 legPositions.forEach(pos => {
                     const leg = new THREE.Mesh(legGeometry, legMaterial);
-                    // Center legs a bit lower so their bottoms touch the floor at y = -1
-                    leg.position.set(pos.x, 0.5, pos.z);
+                    // Align top with tabletop and extend bottom toward the floor
+                    leg.position.set(pos.x, 0.875, pos.z); // Keeps top at ~2.75 while lowering bottom to ~-1
                     leg.castShadow = true;
                     tableGroup.add(leg);
                 });
@@ -224,177 +311,104 @@
             }
             
             function createRomanticDecor() {
-                // Central candle
-                const candleMaterial = new THREE.MeshLambertMaterial({ color: 0xfff5e1 });
-                const candleGeometry = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 12);
-                const candle = new THREE.Mesh(candleGeometry, candleMaterial);
-                candle.position.set(0, 3.1, 0);
-                candle.castShadow = true;
-                scene.add(candle);
-
-                // Candle flame
-                const flameGeometry = new THREE.SphereGeometry(0.25, 8, 8);
-                const flameMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa33 });
-                const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-                flame.position.set(0, 3.9, 0);
-                scene.add(flame);
-
-                // Small flower vase
-                const vaseGeometry = new THREE.CylinderGeometry(0.25, 0.3, 0.8, 12);
-                const vaseMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
-                const vase = new THREE.Mesh(vaseGeometry, vaseMaterial);
-                vase.position.set(0, 3, -1.5);
-                vase.castShadow = true;
-                scene.add(vase);
-
-                const flowerGeometry = new THREE.SphereGeometry(0.3, 8, 8);
-                const flowerMaterial = new THREE.MeshLambertMaterial({ color: 0xff69b4 });
-                const flower = new THREE.Mesh(flowerGeometry, flowerMaterial);
-                flower.position.set(0, 3.6, -1.5);
-                flower.castShadow = true;
-                scene.add(flower);
-            }
-            
-            function createPhotoFrames() {
-                const photoMaterial = new THREE.MeshBasicMaterial({ color: 0x87ceeb });
-                const positions = [
-                    { x: -4, z: 1.2, rotationY: Math.PI / 16 },   // Left
-                    { x: 4, z: 1.2, rotationY: -Math.PI / 16 }    // Right
+                // Romantic candles on the table
+                const candlePositions = [
+                    { x: -2, z: -1 },
+                    { x: 2, z: -1 },
+                    { x: -2, z: 1 },
+                    { x: 2, z: 1 }
                 ];
 
-                // Fallback: simple rectangular frames if FBX can't be loaded
-                function createSimpleFrames() {
-                    console.log('Using simple frames as fallback');
-                    const frameMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-                    positions.forEach((pos, index) => {
-                        const frameGroup = new THREE.Group();
+                candlePositions.forEach(pos => {
+                    // Candle body
+                    const candleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.8);
+                    const candleMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+                    const candle = new THREE.Mesh(candleGeometry, candleMaterial);
+                    candle.position.set(pos.x, 2.9, pos.z); // Adjust for raised table
+                    candle.castShadow = true;
+                    scene.add(candle);
 
-                        const frameGeometry = new THREE.BoxGeometry(2.2, 2.6, 0.25);
-                        const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-                        frame.castShadow = true;
-                        frameGroup.add(frame);
-
-                        const photoGeometry = new THREE.PlaneGeometry(1.8, 2.2);
-                        const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
-                        photo.position.z = 0.14;
-                        photo.userData = { frameIndex: index };
-                        frameGroup.add(photo);
-
-                        frameGroup.position.set(pos.x, 3.3, pos.z);
-                        frameGroup.rotation.y = pos.rotationY;
-
-                        photoFrames.push(frameGroup);
-                        scene.add(frameGroup);
+                    // Candle flame
+                    const flameGeometry = new THREE.SphereGeometry(0.15, 6, 6);
+                    const flameMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0xffa500,
+                        emissive: 0xff4500,
+                        emissiveIntensity: 0.8
                     });
-                }
+                    const flame = new THREE.Mesh(flameGeometry, flameMaterial);
+                    flame.position.set(pos.x, 3.3, pos.z); // Adjust for raised table
+                    scene.add(flame);
 
-                // Wait for FBXLoader to be available
-                function waitForFBXLoader(callback, maxAttempts = 50) {
-                    let attempts = 0;
-                    const checkLoader = setInterval(() => {
-                        attempts++;
-                        if (typeof THREE.FBXLoader !== 'undefined' || attempts >= maxAttempts) {
-                            clearInterval(checkLoader);
-                            callback();
-                        }
-                    }, 100);
-                }
-                
-                waitForFBXLoader(() => {
-                    // Check if FBXLoader is available
-                    if (typeof THREE.FBXLoader === 'undefined') {
-                        console.warn('FBXLoader not available, using simple frames');
-                        createSimpleFrames();
-                        return;
-                    }
+                    // Candle light
+                    const candleLight = new THREE.PointLight(0xffa500, 0.5, 8);
+                    candleLight.position.set(pos.x, 3.3, pos.z); // Adjust for raised table
+                    scene.add(candleLight);
+                });
 
-                    console.log('Loading FBX file from:', FBX_FILE_URL);
-                    const loader = new THREE.FBXLoader();
-                    
-                    loader.load(
-                        FBX_FILE_URL,
-                        function(object) {
-                            console.log('FBX loaded successfully', object);
-                            
-                            // Remove any existing simple frames
-                            photoFrames.forEach(frame => {
-                                scene.remove(frame);
-                                if (frame.children) {
-                                    frame.children.forEach(child => {
-                                        if (child.geometry) child.geometry.dispose();
-                                        if (child.material) {
-                                            if (Array.isArray(child.material)) {
-                                                child.material.forEach(mat => mat.dispose());
-                                            } else {
-                                                child.material.dispose();
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                            photoFrames = [];
-                            
-                            object.traverse(function(child) {
-                                if (child.isMesh) {
-                                    child.castShadow = true;
-                                    child.receiveShadow = true;
-                                    // Ensure materials are properly set
-                                    if (child.material) {
-                                        child.material.needsUpdate = true;
-                                    }
-                                }
-                            });
+                // Romantic cake centerpiece
+                const cakeBaseGeometry = new THREE.CylinderGeometry(0.9, 0.9, 0.4, 32);
+                const cakeBaseMaterial = new THREE.MeshLambertMaterial({ color: 0xffb3d9 });
+                const cakeBase = new THREE.Mesh(cakeBaseGeometry, cakeBaseMaterial);
+                cakeBase.position.set(0, 3.0, 0);
+                cakeBase.castShadow = true;
+                scene.add(cakeBase);
 
-                            // Calculate bounding box to determine scale
-                            const box = new THREE.Box3().setFromObject(object);
-                            const size = box.getSize(new THREE.Vector3());
-                            const maxDim = Math.max(size.x, size.y, size.z);
-                            // Scale to make frames about 2-3 units tall
-                            const scale = maxDim > 0 ? 2.5 / maxDim : 0.01;
+                const cakeIcingGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.2, 32);
+                const cakeIcingMaterial = new THREE.MeshLambertMaterial({ color: 0xff69b4 });
+                const cakeIcing = new THREE.Mesh(cakeIcingGeometry, cakeIcingMaterial);
+                cakeIcing.position.set(0, 3.2, 0);
+                cakeIcing.castShadow = true;
+                scene.add(cakeIcing);
 
-                            // Table top surface is at y = 2.75 (tableTop at y=2.5, height=0.5, so top = 2.5 + 0.25)
-                            const tableTopY = 2.75;
-
-                            positions.forEach((pos, index) => {
-                                const frameGroup = object.clone(true);
-                                frameGroup.scale.set(scale, scale, scale);
-
-                                // Add photo plane to frame if needed
-                                const photoGeometry = new THREE.PlaneGeometry(1.4, 1.4);
-                                const photo = new THREE.Mesh(photoGeometry, photoMaterial.clone());
-                                photo.position.set(0, 0, 0.2);
-                                photo.userData = { frameIndex: index };
-                                frameGroup.add(photo);
-
-                                // Use a simple fixed Y position on the table
-                                // Table top is at y=2.75, so position frames at y=3.0 to be clearly visible
-                                const yPosition = 3.0;
-
-                                // Position frame on table surface
-                                frameGroup.position.set(pos.x, yPosition, pos.z);
-                                frameGroup.rotation.y = pos.rotationY;
-
-                                photoFrames.push(frameGroup);
-                                scene.add(frameGroup);
-                                
-                                console.log(`Frame ${index}: x=${pos.x}, y=${yPosition.toFixed(2)}, z=${pos.z}, scale=${scale.toFixed(4)}, frame height=${scaledSize.y.toFixed(2)}, table top=${tableTopY}`);
-                            });
-                            console.log('Photo frames created from FBX');
-                        },
-                        function(progress) {
-                            if (progress.lengthComputable) {
-                                const percentComplete = (progress.loaded / progress.total) * 100;
-                                console.log('Loading FBX: ' + Math.round(percentComplete) + '%');
-                            }
-                        },
-                        function(error) {
-                            console.error('Error loading FBX file:', error);
-                            createSimpleFrames();
-                        }
+                // Strawberries on cake
+                for (let i = 0; i < 6; i++) {
+                    const berry = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.12, 8, 8),
+                        new THREE.MeshLambertMaterial({ color: 0xdc143c })
                     );
+                    const angle = (i / 6) * Math.PI * 2;
+                    berry.position.set(
+                        Math.cos(angle) * 0.5,
+                        3.35,
+                        Math.sin(angle) * 0.5
+                    );
+                    berry.castShadow = true;
+                    scene.add(berry);
+                }
+
+                // Plates for Adem and Säma
+                const plateGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.05, 24);
+                const plateMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffe6f0, emissiveIntensity: 0.05 });
+                const plateOffsets = [
+                    { x: -2.2, z: 0 },
+                    { x: 2.2, z: 0 }
+                ];
+
+                plateOffsets.forEach(offset => {
+                    const plate = new THREE.Mesh(plateGeometry, plateMaterial);
+                    plate.position.set(offset.x, 2.88, offset.z);
+                    plate.receiveShadow = true;
+                    scene.add(plate);
+
+                    // Add romantic desserts on plates
+                    const dessert = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.25, 0.5, 16),
+                        new THREE.MeshLambertMaterial({ color: 0xff69b4 })
+                    );
+                    dessert.position.set(offset.x, 3.15, offset.z);
+                    dessert.castShadow = true;
+                    scene.add(dessert);
+
+                    const glaze = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.18, 8, 8),
+                        new THREE.MeshLambertMaterial({ color: 0xffe6f0, emissive: 0xffc0cb, emissiveIntensity: 0.2 })
+                    );
+                    glaze.position.set(offset.x, 3.25, offset.z);
+                    scene.add(glaze);
                 });
             }
             
+                        
             function createChairs() {
                 const chairMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
                 const seatMaterial = new THREE.MeshLambertMaterial({ color: 0xa0522d });
@@ -437,7 +451,7 @@
                     chair1.add(leg);
                 });
                 
-                chair1.position.set(-12, 0, 0);
+                chair1.position.set(-6, 0, 0);
                 chair1.rotation.y = Math.PI / 2;
                 scene.add(chair1);
                 
@@ -471,19 +485,19 @@
                     chair2.add(leg);
                 });
                 
-                chair2.position.set(12, 0, 0);
+                chair2.position.set(6, 0, 0);
                 chair2.rotation.y = -Math.PI / 2;
                 scene.add(chair2);
             }
             
             function createPeople() {
-                // Person 1 - Sitting in left chair
+                // Person 1 - Sitting in left chair (romantic outfit)
                 const person1 = new THREE.Group();
                 
-                // Body
+                // Body in romantic pink
                 const body1 = new THREE.Mesh(
                     new THREE.CylinderGeometry(1.5, 1.8, 4, 8),
-                    new THREE.MeshLambertMaterial({ color: 0x4169e1 }) // Blue shirt
+                    new THREE.MeshLambertMaterial({ color: 0xff69b4 }) // Romantic pink
                 );
                 body1.position.set(0, 5, 0);
                 person1.add(body1);
@@ -496,101 +510,290 @@
                 head1.position.set(0, 7.5, 0);
                 person1.add(head1);
                 
+                // Romantic hair with pink tint
+                const hair1 = new THREE.Mesh(
+                    new THREE.SphereGeometry(1.1, 8, 8),
+                    new THREE.MeshLambertMaterial({ color: 0xffb3d9 }) // Pink hair
+                );
+                hair1.position.set(0, 8.3, 0);
+                hair1.scale.y = 0.6;
+                person1.add(hair1);
+                
                 // Arms positioned toward table
-                const armGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3);
-                const leftArm1 = new THREE.Mesh(armGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
+                const ademArmGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3);
+                const leftArm1 = new THREE.Mesh(ademArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
                 leftArm1.position.set(-1.5, 5.5, 1);
                 leftArm1.rotation.x = -Math.PI / 4;
                 person1.add(leftArm1);
                 
-                const rightArm1 = new THREE.Mesh(armGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
+                const rightArm1 = new THREE.Mesh(ademArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
                 rightArm1.position.set(1.5, 5.5, 1);
                 rightArm1.rotation.x = -Math.PI / 4;
                 person1.add(rightArm1);
                 
                 // Position person 1 in left chair (sit on chair)
-                person1.position.set(-12, -2, 0);
+                person1.position.set(-6, -2, 0);
                 person1.rotation.y = Math.PI / 2;
                 scene.add(person1);
                 
-                // Person 2 - Sitting in right chair
+                // Add "Adem" name label above person 1
+                // Labels will be positioned in updateNameLabels function
+                
+                // Person 2 - Sitting in right chair (romantic outfit)
                 const person2 = new THREE.Group();
                 
-                // Body
+                // Body in romantic red - make skinny and short
                 const body2 = new THREE.Mesh(
-                    new THREE.CylinderGeometry(1.5, 1.8, 4, 8),
-                    new THREE.MeshLambertMaterial({ color: 0xff69b4 }) // Pink shirt
+                    new THREE.CylinderGeometry(0.8, 1.0, 2.5, 8), // Smaller radius and height
+                    new THREE.MeshLambertMaterial({ color: 0xdc143c }) // Romantic red
                 );
-                body2.position.set(0, 5, 0);
+                body2.position.set(0, 3.5, 0); // Lower position for shorter height
                 person2.add(body2);
                 
-                // Head
+                // Head - adjust for shorter body
                 const head2 = new THREE.Mesh(
-                    new THREE.SphereGeometry(1, 8, 8),
+                    new THREE.SphereGeometry(0.8, 8, 8), // Smaller head
                     new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }) // Skin tone
                 );
-                head2.position.set(0, 7.5, 0);
+                head2.position.set(0, 5.5, 0); // Lower head position
                 person2.add(head2);
                 
-                // Hair
+                // Romantic hair with rose tint - adjust for smaller head
                 const hair2 = new THREE.Mesh(
-                    new THREE.SphereGeometry(1.1, 8, 8),
-                    new THREE.MeshLambertMaterial({ color: 0x8b4513 }) // Brown hair
+                    new THREE.SphereGeometry(0.9, 8, 8), // Smaller hair
+                    new THREE.MeshLambertMaterial({ color: 0xff1493 }) // Rose hair
                 );
-                hair2.position.set(0, 8.3, 0);
+                hair2.position.set(0, 6.0, 0); // Lower hair position
                 hair2.scale.y = 0.6;
                 person2.add(hair2);
                 
-                // Arms positioned toward table
-                const leftArm2 = new THREE.Mesh(armGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                leftArm2.position.set(-1.5, 5.5, 1);
-                leftArm2.rotation.x = -Math.PI / 4;
+                // Arms positioned differently - one arm up, one down (shorter arms)
+                const samaArmGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.8); // Much shorter arms
+                const leftArm2 = new THREE.Mesh(samaArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
+                leftArm2.position.set(-0.6, 4.4, 1.0); // Move forward so it rests above table edge
+                leftArm2.rotation.x = -Math.PI / 5; // Gentle angle while staying clear of chair
                 person2.add(leftArm2);
                 
-                const rightArm2 = new THREE.Mesh(armGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                rightArm2.position.set(1.5, 5.5, 1);
-                rightArm2.rotation.x = -Math.PI / 4;
+                const rightArm2 = new THREE.Mesh(samaArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
+                rightArm2.position.set(0.8, 3.7, 1.4); // Shift forward to sit over lap instead of into chair
+                rightArm2.rotation.x = -Math.PI / 2.5; // Maintain reaching pose without intersecting chair
                 person2.add(rightArm2);
                 
-                // Position person 2 in right chair (sit on chair)
-                person2.position.set(12, -2, 0);
+                person2.position.set(6, -2, 0);
                 person2.rotation.y = -Math.PI / 2;
                 scene.add(person2);
                 
-                // No plates: leave space in front of each person for a clean romantic table
+                // Add "Säma" name label above person 2
+                // Labels will be positioned in updateNameLabels function
             }
             
-            function createBirthdayCard() {
+            function updateNameLabels() {
+                // Adem position (left person)
+                const ademWorldPos = new THREE.Vector3(-6, 6, 0);
+                ademWorldPos.project(camera);
+                
+                const ademX = (ademWorldPos.x * 0.5 + 0.5) * window.innerWidth;
+                const ademY = (-ademWorldPos.y * 0.5 + 0.5) * window.innerHeight;
+                
+                const ademLabel = document.getElementById('adem-label');
+                if (ademLabel) {
+                    ademLabel.style.left = ademX + 'px';
+                    ademLabel.style.top = (ademY - 20) + 'px';
+                }
+                
+                // Säma position (right person)
+                const samaWorldPos = new THREE.Vector3(6, 6, 0);
+                samaWorldPos.project(camera);
+                
+                const samaX = (samaWorldPos.x * 0.5 + 0.5) * window.innerWidth;
+                const samaY = (-samaWorldPos.y * 0.5 + 0.5) * window.innerHeight;
+                
+                const samaLabel = document.getElementById('sama-label');
+                if (samaLabel) {
+                    samaLabel.style.left = samaX + 'px';
+                    samaLabel.style.top = samaY + 'px';
+                }
+            }
+            
+            function createRomanticBirthdayCard() {
                 const cardGroup = new THREE.Group();
                 
-                // Card
+                // Card with romantic gradient
                 const cardGeometry = new THREE.BoxGeometry(3, 2, 0.1);
-                const cardMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+                const cardMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0xffe6f0,
+                    emissive: 0xffb3d9,
+                    emissiveIntensity: 0.1
+                });
                 const card = new THREE.Mesh(cardGeometry, cardMaterial);
                 card.castShadow = true;
                 cardGroup.add(card);
                 
-                // Add "HAPPY BIRTHDAY" text (simplified as colored rectangle)
-                const textGeometry = new THREE.PlaneGeometry(2.5, 0.5);
-                const textMaterial = new THREE.MeshBasicMaterial({ color: 0xff69b4 });
+                // Add romantic heart decoration
+                const heartGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+                const heartMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xff1493,
+                    emissive: 0xff1493,
+                    emissiveIntensity: 0.3
+                });
+                const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+                heart.position.set(0, 0.3, 0.06);
+                heart.scale.set(1.5, 1, 0.5);
+                cardGroup.add(heart);
+                
+                // Add "LOVE" text (simplified as colored rectangle)
+                const textGeometry = new THREE.PlaneGeometry(2, 0.4);
+                const textMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xdc143c,
+                    emissive: 0xdc143c,
+                    emissiveIntensity: 0.2
+                });
                 const text = new THREE.Mesh(textGeometry, textMaterial);
-                text.position.set(0, 0.3, 0.06);
+                text.position.set(0, -0.2, 0.06);
                 cardGroup.add(text);
+                
+                // Add small decorative hearts
+                for (let i = 0; i < 3; i++) {
+                    const smallHeart = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.1, 6, 6),
+                        new THREE.MeshBasicMaterial({ color: 0xff69b4 })
+                    );
+                    smallHeart.position.set(
+                        -0.8 + i * 0.8,
+                        0.6,
+                        0.06
+                    );
+                    smallHeart.scale.set(1, 0.6, 0.3);
+                    cardGroup.add(smallHeart);
+                }
                 
                 cardGroup.position.set(0, 3, 0);
                 scene.add(cardGroup);
             }
             
             function createCityBackground() {
-                // Create a simple black backdrop
+                // Create romantic gradient backdrop
                 const backdropGeometry = new THREE.SphereGeometry(200, 32, 32);
                 const backdropMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0x000000,
+                    color: 0x1a0033,
                     side: THREE.BackSide
                 });
                 const backdrop = new THREE.Mesh(backdropGeometry, backdropMaterial);
                 scene.add(backdrop);
                 locationBackdrop = backdrop; // Store reference for updates
+                
+                // Add many romantic floating hearts
+                createFloatingHearts();
+            }
+            
+            function createFloatingHearts() {
+                const heartParticles = new THREE.Group();
+                
+                // Create many hearts - 50 hearts!
+                for (let i = 0; i < 50; i++) {
+                    // Create actual heart shape using custom geometry
+                    const heartShape = new THREE.Shape();
+                    const x = 0, y = 0;
+                    heartShape.moveTo(x + 0.5, y + 0.5);
+                    heartShape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
+                    heartShape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
+                    heartShape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.54, x + 0.5, y + 1.9);
+                    heartShape.bezierCurveTo(x + 1.2, y + 1.54, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
+                    heartShape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
+                    heartShape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
+                    
+                    const heartGeometry = new THREE.ShapeGeometry(heartShape);
+                    
+                    // Multiple romantic colors
+                    const colors = [0xff1493, 0xff69b4, 0xffb3d9, 0xdc143c, 0xff00ff, 0xff1493];
+                    const heartMaterial = new THREE.MeshBasicMaterial({ 
+                        color: colors[i % colors.length],
+                        emissive: colors[i % colors.length],
+                        emissiveIntensity: 0.4,
+                        transparent: true,
+                        opacity: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+                    heart.scale.set(0.1, 0.1, 0.1);
+                    heart.rotation.z = Math.PI; // Rotate 180 degrees to make hearts upright
+                    
+                    // Random floating positions - wider spread
+                    heart.position.set(
+                        (Math.random() - 0.5) * 50, // Much wider spread
+                        Math.random() * 15 + 3,     // Higher range
+                        (Math.random() - 0.5) * 50  // Much deeper spread
+                    );
+                    
+                    // Store for animation
+                    heart.userData = {
+                        floatSpeed: Math.random() * 0.02 + 0.01,
+                        floatAmount: Math.random() * 3 + 1, // More floating movement
+                        rotationSpeed: Math.random() * 0.02 + 0.01,
+                        initialY: heart.position.y
+                    };
+                    
+                    heartParticles.add(heart);
+                }
+                
+                scene.add(heartParticles);
+                
+                // Store reference for animation
+                window.floatingHearts = heartParticles;
+            }
+            
+            function createFloatingHearts() {
+                const heartParticles = new THREE.Group();
+                
+                for (let i = 0; i < 15; i++) {
+                    // Create actual heart shape using custom geometry
+                    const heartShape = new THREE.Shape();
+                    const x = 0, y = 0;
+                    heartShape.moveTo(x + 0.5, y + 0.5);
+                    heartShape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
+                    heartShape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
+                    heartShape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.54, x + 0.5, y + 1.9);
+                    heartShape.bezierCurveTo(x + 1.2, y + 1.54, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
+                    heartShape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
+                    heartShape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
+                    
+                    const heartGeometry = new THREE.ShapeGeometry(heartShape);
+                    const heartMaterial = new THREE.MeshBasicMaterial({ 
+                        color: i % 2 === 0 ? 0xff1493 : 0xff69b4,
+                        emissive: i % 2 === 0 ? 0xff1493 : 0xff69b4,
+                        emissiveIntensity: 0.4,
+                        transparent: true,
+                        opacity: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+                    heart.scale.set(0.1, 0.1, 0.1);
+                    heart.rotation.z = Math.PI; // Rotate 180 degrees to make hearts upright
+                    
+                    // Random floating positions
+                    heart.position.set(
+                        (Math.random() - 0.5) * 30,
+                        Math.random() * 10 + 5,
+                        (Math.random() - 0.5) * 30
+                    );
+                    
+                    // Store for animation
+                    heart.userData = {
+                        floatSpeed: Math.random() * 0.02 + 0.01,
+                        floatAmount: Math.random() * 2 + 1,
+                        rotationSpeed: Math.random() * 0.02 + 0.01,
+                        initialY: heart.position.y
+                    };
+                    
+                    heartParticles.add(heart);
+                }
+                
+                scene.add(heartParticles);
+                
+                // Store reference for animation
+                window.floatingHearts = heartParticles;
             }
             
             function openGoogleMaps() {
@@ -604,6 +807,7 @@
                     
                     reader.onload = function(e) {
                         const textureLoader = new THREE.TextureLoader();
+                        textureLoader.crossOrigin = 'anonymous';
                         textureLoader.load(e.target.result, function(texture) {
                             if (locationBackdrop) {
                                 locationBackdrop.material.map = texture;
@@ -615,12 +819,38 @@
                     reader.readAsDataURL(input.files[0]);
                 }
             }
+
+
+
+
+
+
+
             
             function animate() {
                 requestAnimationFrame(animate);
                 
                 // Update controls
                 controls.update();
+                
+                // Update name label positions
+                updateNameLabels();
+                
+                // Animate floating hearts
+                if (window.floatingHearts) {
+                    const time = Date.now() * 0.001;
+                    window.floatingHearts.children.forEach((heart, index) => {
+                        if (heart.userData) {
+                            // Floating motion only
+                            heart.position.y = heart.userData.initialY + 
+                                Math.sin(time * heart.userData.floatSpeed + index) * heart.userData.floatAmount;
+                            
+                            // Gentle sway instead of full rotation
+                            heart.rotation.x = Math.sin(time * 0.5 + index) * 0.1;
+                            // No rotation.y - keep hearts upright
+                        }
+                    });
+                }
                 
                 renderer.render(scene, camera);
             }
@@ -633,7 +863,8 @@
             
             window.addEventListener('resize', onWindowResize);
             
-            init();
+            // Wait for all dependencies to load before initializing
+            waitForDependencies(init);
         </script>
     </body>
     </html>
