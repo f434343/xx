@@ -1,882 +1,877 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>A + S</title>
-        <style>
-            body {
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-                background: #000;
-                font-family: 'Arial', sans-serif;
-            }
-            canvas {
-                display: block;
-                width: 100vw;
-                height: 100vh;
-            }
-            .controls {
-                position: absolute;
-                top: 10px;
-                left: 10px;
-                background: rgba(255, 255, 255, 0.9);
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                z-index: 100;
-            }
-            .name-label {
-                position: absolute;
-                font-family: 'Arial', sans-serif;
-                font-size: 18px;
-                font-weight: bold;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-                pointer-events: none;
-                z-index: 50;
-                transform: translate(-50%, -50%);
-            }
-            .name-label.adem {
-                color: #ff69b4;
-            }
-            .name-label.sama {
-                color: #dc143c;
-            }
-            .date-banner {
-                position: absolute;
-                top: 10px;
-                left: 50%;
-                transform: translateX(-50%);
-                font-family: 'Arial', sans-serif;
-                font-size: 28px;
-                font-weight: bold;
-                color: #ffe6f0;
-                text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
-                letter-spacing: 1px;
-                z-index: 60;
-            }
-            @media (max-width: 600px) {
-                .name-label {
-                    font-size: 14px;
-                }
-                .date-banner {
-                    font-size: 22px;
-                    top: 6px;
-                }
-            }
-            .controls h3 {
-                margin: 0 0 10px 0;
-                color: #333;
-            }
-            .photo-upload {
-                margin: 5px 0;
-            }
-            .photo-upload label {
-                display: block;
-                margin-bottom: 5px;
-                color: #555;
-                font-size: 14px;
-            }
-            .photo-upload input[type="file"] {
-                display: none;
-            }
-            .photo-upload .upload-btn {
-                background: #ff69b4;
-                color: white;
-                padding: 5px 10px;
-                border-radius: 5px;
-                cursor: pointer;
-                display: inline-block;
-                font-size: 12px;
-                transition: background 0.3s;
-            }
-            .photo-upload .upload-btn:hover {
-                background: #ff1493;
-            }
-            .instructions {
-                margin-top: 10px;
-                font-size: 12px;
-                color: #666;
-            }
-        </style>
-    </head>
-    <body>
-        <!-- Name Labels -->
-        <div id="adem-label" class="name-label adem">Adem</div>
-        <div id="sama-label" class="name-label sama">Säma</div>
-        <div id="dateBanner" class="date-banner">Date</div>
-        
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-        
-        <!-- Multiple CDN fallbacks for OrbitControls -->
-        <script>
-            (function loadOrbitControls() {
-                const scripts = [
-                    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
-                    'https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js',
-                    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js'
-                ];
-                
-                function loadScript(index) {
-                    if (index >= scripts.length) {
-                        console.warn('Could not load OrbitControls from any CDN');
-                        return;
-                    }
-                    
-                    const script = document.createElement('script');
-                    script.src = scripts[index];
-                    script.onload = () => console.log('OrbitControls loaded from:', scripts[index]);
-                    script.onerror = () => loadScript(index + 1);
-                    document.head.appendChild(script);
-                }
-                
-                loadScript(0);
-            })();
-        </script>
-        
-                <script>
-            // Debug: Check if dependencies are loaded
-            console.log('THREE available:', typeof THREE !== 'undefined');
-            console.log('OrbitControls available:', typeof THREE.OrbitControls !== 'undefined');
-        </script>
-        <script>
-                        
-            let scene, camera, renderer, controls;
-            let locationBackdrop;
-            let raycaster, mouse;
-            
-            // Wait for all dependencies to load before initializing
-            function waitForDependencies(callback) {
-                let attempts = 0;
-                const maxAttempts = 100; // 10 seconds max wait
-                
-                const checkDependencies = () => {
-                    attempts++;
-                    
-                    const threeLoaded = typeof THREE !== 'undefined';
-                    const orbitControlsLoaded = typeof THREE.OrbitControls !== 'undefined';
-                    
-                    console.log(`Dependency check ${attempts}:`, {
-                        three: threeLoaded,
-                        orbitControls: orbitControlsLoaded
-                    });
-                    
-                    if (threeLoaded && orbitControlsLoaded) {
-                        console.log('All dependencies loaded, initializing scene...');
-                        callback();
-                    } else if (attempts >= maxAttempts) {
-                        console.error('Dependencies failed to load in time. Initializing with fallbacks...');
-                        // Initialize anyway - the code has fallbacks for missing dependencies
-                        callback();
-                    } else {
-                        setTimeout(checkDependencies, 100);
-                    }
-                };
-                
-                checkDependencies();
-            }
-            
-            function init() {
-                scene = new THREE.Scene();
-                
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 15, 30);
-                camera.lookAt(0, 5, 0);
-                
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.shadowMap.enabled = true;
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                document.body.appendChild(renderer.domElement);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Glass</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-                                
-                // Add orbit controls
-                controls = new THREE.OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
-                controls.dampingFactor = 0.05;
-                controls.minDistance = 10;
-                controls.maxDistance = 50;
-                controls.maxPolarAngle = Math.PI / 2;
-                
-                createLighting();
-                createTablecloth();
-                createSmallTable();
-                createRomanticDecor();
-                createChairs();
-                createPeople();
-                createCityBackground();
-                
-                animate();
-            }
-            
-            function createLighting() {
-                // Soft romantic ambient light with pink tint
-                const ambientLight = new THREE.AmbientLight(0xffe6f0, 0.4);
-                scene.add(ambientLight);
-                
-                // Main warm romantic light from above with golden-pink hue
-                const mainLight = new THREE.DirectionalLight(0xffb3d9, 1.2);
-                mainLight.position.set(5, 20, 5);
-                mainLight.castShadow = true;
-                mainLight.shadow.mapSize.width = 2048;
-                mainLight.shadow.mapSize.height = 2048;
-                scene.add(mainLight);
-                
-                // Romantic pink point lights for candle-like ambiance
-                const romanticLight1 = new THREE.PointLight(0xff69b4, 0.8, 15);
-                romanticLight1.position.set(-3, 3, 0);
-                scene.add(romanticLight1);
-                
-                const romanticLight2 = new THREE.PointLight(0xff1493, 0.8, 15);
-                romanticLight2.position.set(3, 3, 0);
-                scene.add(romanticLight2);
-                
-                // Soft red accent light for passion
-                const passionLight = new THREE.PointLight(0xdc143c, 0.3, 10);
-                passionLight.position.set(0, 2.5, -2);
-                scene.add(passionLight);
-                
-                // City lights glow with romantic purple tint
-                const cityLight = new THREE.DirectionalLight(0x9370db, 0.4);
-                cityLight.position.set(-10, 10, -20);
-                scene.add(cityLight);
-                
-                // Add subtle spotlight effect on the table center
-                const spotlight = new THREE.SpotLight(0xffb3d9, 0.6);
-                spotlight.position.set(0, 8, 0);
-                spotlight.angle = Math.PI / 6;
-                spotlight.penumbra = 0.3;
-                spotlight.castShadow = true;
-                scene.add(spotlight);
-            }
-            
-            function createTablecloth() {
-                const geometry = new THREE.PlaneGeometry(60, 40);
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 512;
-                const context = canvas.getContext('2d');
-                
-                // Create romantic pattern with hearts and soft colors
-                const squareSize = 32;
-                for (let i = 0; i < 16; i++) {
-                    for (let j = 0; j < 16; j++) {
-                        // Alternate between soft pink, white, and rose colors
-                        const colors = ['#ffe6f0', '#ffffff', '#ffb3d9', '#ff69b4'];
-                        const colorIndex = (i + j) % colors.length;
-                        context.fillStyle = colors[colorIndex];
-                        context.fillRect(i * squareSize, j * squareSize, squareSize, squareSize);
-                        
-                        // Add small heart pattern on some squares
-                        if ((i + j) % 3 === 0) {
-                            context.fillStyle = 'rgba(255, 20, 147, 0.3)';
-                            context.font = '16px Arial';
-                            context.textAlign = 'center';
-                            context.textBaseline = 'middle';
-                            context.fillText('♥', i * squareSize + squareSize/2, j * squareSize + squareSize/2);
-                        }
-                    }
-                }
-                
-                const texture = new THREE.CanvasTexture(canvas);
-                const material = new THREE.MeshLambertMaterial({ map: texture });
-                const tablecloth = new THREE.Mesh(geometry, material);
-                tablecloth.rotation.x = -Math.PI / 2;
-                tablecloth.position.y = -1;
-                tablecloth.receiveShadow = true;
-                scene.add(tablecloth);
-            }
-            
-            function createSmallTable() {
-                const tableGroup = new THREE.Group();
-                
-                // Tabletop - raise to match taller legs
-                const tableTopGeometry = new THREE.BoxGeometry(8, 0.5, 4);
-                const tableTopMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-                const tableTop = new THREE.Mesh(tableTopGeometry, tableTopMaterial);
-                tableTop.position.set(0, 2.75, 0); // Raised to sit on taller legs
-                tableTop.castShadow = true;
-                tableTop.receiveShadow = true;
-                tableGroup.add(tableTop);
-                
-                // Table legs - extend further downward (taller from the bottom)
-                const legGeometry = new THREE.BoxGeometry(0.3, 3.75, 0.3); // Taller legs extending downward
-                const legMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
-                
-                const legPositions = [
-                    { x: -3.5, z: -1.5 },
-                    { x: 3.5, z: -1.5 },
-                    { x: -3.5, z: 1.5 },
-                    { x: 3.5, z: 1.5 }
-                ];
-                
-                legPositions.forEach(pos => {
-                    const leg = new THREE.Mesh(legGeometry, legMaterial);
-                    // Align top with tabletop and extend bottom toward the floor
-                    leg.position.set(pos.x, 0.875, pos.z); // Keeps top at ~2.75 while lowering bottom to ~-1
-                    leg.castShadow = true;
-                    tableGroup.add(leg);
-                });
-                
-                scene.add(tableGroup);
-            }
-            
-            function createRomanticDecor() {
-                // Romantic candles on the table
-                const candlePositions = [
-                    { x: -2, z: -1 },
-                    { x: 2, z: -1 },
-                    { x: -2, z: 1 },
-                    { x: 2, z: 1 }
-                ];
+    :root {
+      --glass-bg: rgba(255, 255, 255, 0.08);
+      --glass-bg-strong: rgba(255, 255, 255, 0.12);
+      --glass-border: rgba(255, 255, 255, 0.18);
+      --glass-shadow: rgba(0, 0, 0, 0.2);
+      --text: rgba(255, 255, 255, 0.95);
+      --text-muted: rgba(255, 255, 255, 0.6);
+      --accent: rgba(255, 255, 255, 0.9);
+      --accent-glow: rgba(255, 255, 255, 0.15);
+      --link: rgba(255, 255, 255, 0.85);
+      --error: rgba(255, 120, 120, 0.95);
+      --success: rgba(160, 255, 180, 0.95);
+    }
 
-                candlePositions.forEach(pos => {
-                    // Candle body
-                    const candleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.8);
-                    const candleMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
-                    const candle = new THREE.Mesh(candleGeometry, candleMaterial);
-                    candle.position.set(pos.x, 2.9, pos.z); // Adjust for raised table
-                    candle.castShadow = true;
-                    scene.add(candle);
+    body {
+      min-height: 100vh;
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 35%, #0f3460 100%);
+      background-attachment: fixed;
+      overflow: hidden;
+    }
 
-                    // Candle flame
-                    const flameGeometry = new THREE.SphereGeometry(0.15, 6, 6);
-                    const flameMaterial = new THREE.MeshBasicMaterial({ 
-                        color: 0xffa500,
-                        emissive: 0xff4500,
-                        emissiveIntensity: 0.8
-                    });
-                    const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-                    flame.position.set(pos.x, 3.3, pos.z); // Adjust for raised table
-                    scene.add(flame);
+    body::before,
+    body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      width: 400px;
+      height: 400px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 70%);
+      top: -150px;
+      left: -100px;
+      animation: float 12s ease-in-out infinite;
+    }
+    body::after {
+      width: 350px;
+      height: 350px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 70%);
+      bottom: -100px;
+      right: -80px;
+      animation: float 14s ease-in-out infinite reverse;
+    }
 
-                    // Candle light
-                    const candleLight = new THREE.PointLight(0xffa500, 0.5, 8);
-                    candleLight.position.set(pos.x, 3.3, pos.z); // Adjust for raised table
-                    scene.add(candleLight);
-                });
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(30px, -30px) scale(1.05); }
+    }
 
-                // Romantic cake centerpiece
-                const cakeBaseGeometry = new THREE.CylinderGeometry(0.9, 0.9, 0.4, 32);
-                const cakeBaseMaterial = new THREE.MeshLambertMaterial({ color: 0xffb3d9 });
-                const cakeBase = new THREE.Mesh(cakeBaseGeometry, cakeBaseMaterial);
-                cakeBase.position.set(0, 3.0, 0);
-                cakeBase.castShadow = true;
-                scene.add(cakeBase);
+    .login-wrapper {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+    }
 
-                const cakeIcingGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.2, 32);
-                const cakeIcingMaterial = new THREE.MeshLambertMaterial({ color: 0xff69b4 });
-                const cakeIcing = new THREE.Mesh(cakeIcingGeometry, cakeIcingMaterial);
-                cakeIcing.position.set(0, 3.2, 0);
-                cakeIcing.castShadow = true;
-                scene.add(cakeIcing);
+    .login-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      box-shadow: 0 25px 50px -12px var(--glass-shadow),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
 
-                // Strawberries on cake
-                for (let i = 0; i < 6; i++) {
-                    const berry = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.12, 8, 8),
-                        new THREE.MeshLambertMaterial({ color: 0xdc143c })
-                    );
-                    const angle = (i / 6) * Math.PI * 2;
-                    berry.position.set(
-                        Math.cos(angle) * 0.5,
-                        3.35,
-                        Math.sin(angle) * 0.5
-                    );
-                    berry.castShadow = true;
-                    scene.add(berry);
-                }
+    .login-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
 
-                // Plates for Adem and Säma
-                const plateGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.05, 24);
-                const plateMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffe6f0, emissiveIntensity: 0.05 });
-                const plateOffsets = [
-                    { x: -2.2, z: 0 },
-                    { x: 2.2, z: 0 }
-                ];
+    .login-header .icon-wrap {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 1rem;
+      background: var(--glass-bg-strong);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: var(--accent);
+    }
 
-                plateOffsets.forEach(offset => {
-                    const plate = new THREE.Mesh(plateGeometry, plateMaterial);
-                    plate.position.set(offset.x, 2.88, offset.z);
-                    plate.receiveShadow = true;
-                    scene.add(plate);
+    .login-header h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
 
-                    // Add romantic desserts on plates
-                    const dessert = new THREE.Mesh(
-                        new THREE.ConeGeometry(0.25, 0.5, 16),
-                        new THREE.MeshLambertMaterial({ color: 0xff69b4 })
-                    );
-                    dessert.position.set(offset.x, 3.15, offset.z);
-                    dessert.castShadow = true;
-                    scene.add(dessert);
+    .login-header p {
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      font-weight: 300;
+    }
 
-                    const glaze = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.18, 8, 8),
-                        new THREE.MeshLambertMaterial({ color: 0xffe6f0, emissive: 0xffc0cb, emissiveIntensity: 0.2 })
-                    );
-                    glaze.position.set(offset.x, 3.25, offset.z);
-                    scene.add(glaze);
-                });
-            }
-            
-                        
-            function createChairs() {
-                const chairMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-                const seatMaterial = new THREE.MeshLambertMaterial({ color: 0xa0522d });
-                
-                // Chair 1 - Left side
-                const chair1 = new THREE.Group();
-                
-                // Seat
-                const seat1 = new THREE.Mesh(
-                    new THREE.BoxGeometry(4, 0.5, 4),
-                    seatMaterial
-                );
-                seat1.position.set(0, 1, 0);
-                seat1.castShadow = true;
-                chair1.add(seat1);
-                
-                // Backrest
-                const backrest1 = new THREE.Mesh(
-                    new THREE.BoxGeometry(4, 4, 0.5),
-                    chairMaterial
-                );
-                backrest1.position.set(0, 3, -1.75);
-                backrest1.castShadow = true;
-                chair1.add(backrest1);
-                
-                // Legs
-                const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 2);
-                const legPositions = [
-                    { x: -1.5, z: -1.5 },
-                    { x: 1.5, z: -1.5 },
-                    { x: -1.5, z: 1.5 },
-                    { x: 1.5, z: 1.5 }
-                ];
-                
-                legPositions.forEach(pos => {
-                    const leg = new THREE.Mesh(legGeometry, chairMaterial);
-                    // Center legs so bottoms are at y = -1 (floor) and tops overlap the seat
-                    leg.position.set(pos.x, 0, pos.z);
-                    leg.castShadow = true;
-                    chair1.add(leg);
-                });
-                
-                chair1.position.set(-6, 0, 0);
-                chair1.rotation.y = Math.PI / 2;
-                scene.add(chair1);
-                
-                // Chair 2 - Right side
-                const chair2 = new THREE.Group();
-                
-                // Seat
-                const seat2 = new THREE.Mesh(
-                    new THREE.BoxGeometry(4, 0.5, 4),
-                    seatMaterial
-                );
-                seat2.position.set(0, 1, 0);
-                seat2.castShadow = true;
-                chair2.add(seat2);
-                
-                // Backrest
-                const backrest2 = new THREE.Mesh(
-                    new THREE.BoxGeometry(4, 4, 0.5),
-                    chairMaterial
-                );
-                backrest2.position.set(0, 3, -1.75);
-                backrest2.castShadow = true;
-                chair2.add(backrest2);
-                
-                // Legs
-                legPositions.forEach(pos => {
-                    const leg = new THREE.Mesh(legGeometry, chairMaterial);
-                    // Center legs so bottoms are at y = -1 (floor) and tops overlap the seat
-                    leg.position.set(pos.x, 0, pos.z);
-                    leg.castShadow = true;
-                    chair2.add(leg);
-                });
-                
-                chair2.position.set(6, 0, 0);
-                chair2.rotation.y = -Math.PI / 2;
-                scene.add(chair2);
-            }
-            
-            function createPeople() {
-                // Person 1 - Sitting in left chair (romantic outfit)
-                const person1 = new THREE.Group();
-                
-                // Body in romantic pink
-                const body1 = new THREE.Mesh(
-                    new THREE.CylinderGeometry(1.5, 1.8, 4, 8),
-                    new THREE.MeshLambertMaterial({ color: 0xff69b4 }) // Romantic pink
-                );
-                body1.position.set(0, 5, 0);
-                person1.add(body1);
-                
-                // Head
-                const head1 = new THREE.Mesh(
-                    new THREE.SphereGeometry(1, 8, 8),
-                    new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }) // Skin tone
-                );
-                head1.position.set(0, 7.5, 0);
-                person1.add(head1);
-                
-                // Romantic hair with pink tint
-                const hair1 = new THREE.Mesh(
-                    new THREE.SphereGeometry(1.1, 8, 8),
-                    new THREE.MeshLambertMaterial({ color: 0xffb3d9 }) // Pink hair
-                );
-                hair1.position.set(0, 8.3, 0);
-                hair1.scale.y = 0.6;
-                person1.add(hair1);
-                
-                // Arms positioned toward table
-                const ademArmGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3);
-                const leftArm1 = new THREE.Mesh(ademArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                leftArm1.position.set(-1.5, 5.5, 1);
-                leftArm1.rotation.x = -Math.PI / 4;
-                person1.add(leftArm1);
-                
-                const rightArm1 = new THREE.Mesh(ademArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                rightArm1.position.set(1.5, 5.5, 1);
-                rightArm1.rotation.x = -Math.PI / 4;
-                person1.add(rightArm1);
-                
-                // Position person 1 in left chair (sit on chair)
-                person1.position.set(-6, -2, 0);
-                person1.rotation.y = Math.PI / 2;
-                scene.add(person1);
-                
-                // Add "Adem" name label above person 1
-                // Labels will be positioned in updateNameLabels function
-                
-                // Person 2 - Sitting in right chair (romantic outfit)
-                const person2 = new THREE.Group();
-                
-                // Body in romantic red - make skinny and short
-                const body2 = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.8, 1.0, 2.5, 8), // Smaller radius and height
-                    new THREE.MeshLambertMaterial({ color: 0xdc143c }) // Romantic red
-                );
-                body2.position.set(0, 3.5, 0); // Lower position for shorter height
-                person2.add(body2);
-                
-                // Head - adjust for shorter body
-                const head2 = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.8, 8, 8), // Smaller head
-                    new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }) // Skin tone
-                );
-                head2.position.set(0, 5.5, 0); // Lower head position
-                person2.add(head2);
-                
-                // Romantic hair with rose tint - adjust for smaller head
-                const hair2 = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.9, 8, 8), // Smaller hair
-                    new THREE.MeshLambertMaterial({ color: 0xff1493 }) // Rose hair
-                );
-                hair2.position.set(0, 6.0, 0); // Lower hair position
-                hair2.scale.y = 0.6;
-                person2.add(hair2);
-                
-                // Arms positioned differently - one arm up, one down (shorter arms)
-                const samaArmGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.8); // Much shorter arms
-                const leftArm2 = new THREE.Mesh(samaArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                leftArm2.position.set(-0.6, 4.4, 1.0); // Move forward so it rests above table edge
-                leftArm2.rotation.x = -Math.PI / 5; // Gentle angle while staying clear of chair
-                person2.add(leftArm2);
-                
-                const rightArm2 = new THREE.Mesh(samaArmGeometry, new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }));
-                rightArm2.position.set(0.8, 3.7, 1.4); // Shift forward to sit over lap instead of into chair
-                rightArm2.rotation.x = -Math.PI / 2.5; // Maintain reaching pose without intersecting chair
-                person2.add(rightArm2);
-                
-                person2.position.set(6, -2, 0);
-                person2.rotation.y = -Math.PI / 2;
-                scene.add(person2);
-                
-                // Add "Säma" name label above person 2
-                // Labels will be positioned in updateNameLabels function
-            }
-            
-            function updateNameLabels() {
-                // Adem position (left person)
-                const ademWorldPos = new THREE.Vector3(-6, 6, 0);
-                ademWorldPos.project(camera);
-                
-                const ademX = (ademWorldPos.x * 0.5 + 0.5) * window.innerWidth;
-                const ademY = (-ademWorldPos.y * 0.5 + 0.5) * window.innerHeight;
-                
-                const ademLabel = document.getElementById('adem-label');
-                if (ademLabel) {
-                    ademLabel.style.left = ademX + 'px';
-                    ademLabel.style.top = (ademY - 20) + 'px';
-                }
-                
-                // Säma position (right person)
-                const samaWorldPos = new THREE.Vector3(6, 6, 0);
-                samaWorldPos.project(camera);
-                
-                const samaX = (samaWorldPos.x * 0.5 + 0.5) * window.innerWidth;
-                const samaY = (-samaWorldPos.y * 0.5 + 0.5) * window.innerHeight;
-                
-                const samaLabel = document.getElementById('sama-label');
-                if (samaLabel) {
-                    samaLabel.style.left = samaX + 'px';
-                    samaLabel.style.top = samaY + 'px';
-                }
-            }
-            
-            function createRomanticBirthdayCard() {
-                const cardGroup = new THREE.Group();
-                
-                // Card with romantic gradient
-                const cardGeometry = new THREE.BoxGeometry(3, 2, 0.1);
-                const cardMaterial = new THREE.MeshLambertMaterial({ 
-                    color: 0xffe6f0,
-                    emissive: 0xffb3d9,
-                    emissiveIntensity: 0.1
-                });
-                const card = new THREE.Mesh(cardGeometry, cardMaterial);
-                card.castShadow = true;
-                cardGroup.add(card);
-                
-                // Add romantic heart decoration
-                const heartGeometry = new THREE.SphereGeometry(0.3, 8, 8);
-                const heartMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0xff1493,
-                    emissive: 0xff1493,
-                    emissiveIntensity: 0.3
-                });
-                const heart = new THREE.Mesh(heartGeometry, heartMaterial);
-                heart.position.set(0, 0.3, 0.06);
-                heart.scale.set(1.5, 1, 0.5);
-                cardGroup.add(heart);
-                
-                // Add "LOVE" text (simplified as colored rectangle)
-                const textGeometry = new THREE.PlaneGeometry(2, 0.4);
-                const textMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0xdc143c,
-                    emissive: 0xdc143c,
-                    emissiveIntensity: 0.2
-                });
-                const text = new THREE.Mesh(textGeometry, textMaterial);
-                text.position.set(0, -0.2, 0.06);
-                cardGroup.add(text);
-                
-                // Add small decorative hearts
-                for (let i = 0; i < 3; i++) {
-                    const smallHeart = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.1, 6, 6),
-                        new THREE.MeshBasicMaterial({ color: 0xff69b4 })
-                    );
-                    smallHeart.position.set(
-                        -0.8 + i * 0.8,
-                        0.6,
-                        0.06
-                    );
-                    smallHeart.scale.set(1, 0.6, 0.3);
-                    cardGroup.add(smallHeart);
-                }
-                
-                cardGroup.position.set(0, 3, 0);
-                scene.add(cardGroup);
-            }
-            
-            function createCityBackground() {
-                // Create romantic gradient backdrop
-                const backdropGeometry = new THREE.SphereGeometry(200, 32, 32);
-                const backdropMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0x1a0033,
-                    side: THREE.BackSide
-                });
-                const backdrop = new THREE.Mesh(backdropGeometry, backdropMaterial);
-                scene.add(backdrop);
-                locationBackdrop = backdrop; // Store reference for updates
-                
-                // Add many romantic floating hearts
-                createFloatingHearts();
-            }
-            
-            function createFloatingHearts() {
-                const heartParticles = new THREE.Group();
-                
-                // Create many hearts - 50 hearts!
-                for (let i = 0; i < 50; i++) {
-                    // Create actual heart shape using custom geometry
-                    const heartShape = new THREE.Shape();
-                    const x = 0, y = 0;
-                    heartShape.moveTo(x + 0.5, y + 0.5);
-                    heartShape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
-                    heartShape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
-                    heartShape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.54, x + 0.5, y + 1.9);
-                    heartShape.bezierCurveTo(x + 1.2, y + 1.54, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
-                    heartShape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
-                    heartShape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
-                    
-                    const heartGeometry = new THREE.ShapeGeometry(heartShape);
-                    
-                    // Multiple romantic colors
-                    const colors = [0xff1493, 0xff69b4, 0xffb3d9, 0xdc143c, 0xff00ff, 0xff1493];
-                    const heartMaterial = new THREE.MeshBasicMaterial({ 
-                        color: colors[i % colors.length],
-                        emissive: colors[i % colors.length],
-                        emissiveIntensity: 0.4,
-                        transparent: true,
-                        opacity: 0.8,
-                        side: THREE.DoubleSide
-                    });
-                    
-                    const heart = new THREE.Mesh(heartGeometry, heartMaterial);
-                    heart.scale.set(0.1, 0.1, 0.1);
-                    heart.rotation.z = Math.PI; // Rotate 180 degrees to make hearts upright
-                    
-                    // Random floating positions - wider spread
-                    heart.position.set(
-                        (Math.random() - 0.5) * 50, // Much wider spread
-                        Math.random() * 15 + 3,     // Higher range
-                        (Math.random() - 0.5) * 50  // Much deeper spread
-                    );
-                    
-                    // Store for animation
-                    heart.userData = {
-                        floatSpeed: Math.random() * 0.02 + 0.01,
-                        floatAmount: Math.random() * 3 + 1, // More floating movement
-                        rotationSpeed: Math.random() * 0.02 + 0.01,
-                        initialY: heart.position.y
-                    };
-                    
-                    heartParticles.add(heart);
-                }
-                
-                scene.add(heartParticles);
-                
-                // Store reference for animation
-                window.floatingHearts = heartParticles;
-            }
-            
-            function createFloatingHearts() {
-                const heartParticles = new THREE.Group();
-                
-                for (let i = 0; i < 15; i++) {
-                    // Create actual heart shape using custom geometry
-                    const heartShape = new THREE.Shape();
-                    const x = 0, y = 0;
-                    heartShape.moveTo(x + 0.5, y + 0.5);
-                    heartShape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
-                    heartShape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
-                    heartShape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.54, x + 0.5, y + 1.9);
-                    heartShape.bezierCurveTo(x + 1.2, y + 1.54, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
-                    heartShape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
-                    heartShape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
-                    
-                    const heartGeometry = new THREE.ShapeGeometry(heartShape);
-                    const heartMaterial = new THREE.MeshBasicMaterial({ 
-                        color: i % 2 === 0 ? 0xff1493 : 0xff69b4,
-                        emissive: i % 2 === 0 ? 0xff1493 : 0xff69b4,
-                        emissiveIntensity: 0.4,
-                        transparent: true,
-                        opacity: 0.8,
-                        side: THREE.DoubleSide
-                    });
-                    
-                    const heart = new THREE.Mesh(heartGeometry, heartMaterial);
-                    heart.scale.set(0.1, 0.1, 0.1);
-                    heart.rotation.z = Math.PI; // Rotate 180 degrees to make hearts upright
-                    
-                    // Random floating positions
-                    heart.position.set(
-                        (Math.random() - 0.5) * 30,
-                        Math.random() * 10 + 5,
-                        (Math.random() - 0.5) * 30
-                    );
-                    
-                    // Store for animation
-                    heart.userData = {
-                        floatSpeed: Math.random() * 0.02 + 0.01,
-                        floatAmount: Math.random() * 2 + 1,
-                        rotationSpeed: Math.random() * 0.02 + 0.01,
-                        initialY: heart.position.y
-                    };
-                    
-                    heartParticles.add(heart);
-                }
-                
-                scene.add(heartParticles);
-                
-                // Store reference for animation
-                window.floatingHearts = heartParticles;
-            }
-            
-            function openGoogleMaps() {
-                // Open Google Maps for Jungfrusgata 414, Handen
-                window.open('https://www.google.com/maps/place/Jungfrusgata+414,+136+45+Handen/@59.1496,18.1567,17z', '_blank');
-            }
-            
-            function updateLocationBackground(input) {
-                if (input.files && input.files[0]) {
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        const textureLoader = new THREE.TextureLoader();
-                        textureLoader.crossOrigin = 'anonymous';
-                        textureLoader.load(e.target.result, function(texture) {
-                            if (locationBackdrop) {
-                                locationBackdrop.material.map = texture;
-                                locationBackdrop.material.needsUpdate = true;
-                            }
-                        });
-                    };
-                    
-                    reader.readAsDataURL(input.files[0]);
-                }
-            }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 14px;
+      padding: 4px;
+      border: 1px solid var(--glass-border);
+    }
 
+    .tabs button {
+      flex: 1;
+      padding: 0.7rem 1rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
 
+    .tabs button:hover {
+      color: var(--text);
+    }
 
+    .tabs button.active {
+      color: var(--text);
+      background: var(--glass-bg-strong);
+      border: 1px solid var(--glass-border);
+    }
 
+    .message {
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+    }
 
+    .message.show {
+      display: flex;
+    }
 
+    .message.error {
+      background: rgba(255, 120, 120, 0.15);
+      border: 1px solid rgba(255, 120, 120, 0.3);
+      color: var(--error);
+    }
 
-            
-            function animate() {
-                requestAnimationFrame(animate);
-                
-                // Update controls
-                controls.update();
-                
-                // Update name label positions
-                updateNameLabels();
-                
-                // Animate floating hearts
-                if (window.floatingHearts) {
-                    const time = Date.now() * 0.001;
-                    window.floatingHearts.children.forEach((heart, index) => {
-                        if (heart.userData) {
-                            // Floating motion only
-                            heart.position.y = heart.userData.initialY + 
-                                Math.sin(time * heart.userData.floatSpeed + index) * heart.userData.floatAmount;
-                            
-                            // Gentle sway instead of full rotation
-                            heart.rotation.x = Math.sin(time * 0.5 + index) * 0.1;
-                            // No rotation.y - keep hearts upright
-                        }
-                    });
-                }
-                
-                renderer.render(scene, camera);
-            }
-            
-            function onWindowResize() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-            
-            window.addEventListener('resize', onWindowResize);
-            
-            // Wait for all dependencies to load before initializing
-            waitForDependencies(init);
-        </script>
-    </body>
-    </html>
+    .message.success {
+      background: rgba(160, 255, 180, 0.12);
+      border: 1px solid rgba(160, 255, 180, 0.25);
+      color: var(--success);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+
+    .form-group .input-wrap {
+      position: relative;
+    }
+
+    .form-group .input-wrap i {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 1rem;
+      pointer-events: none;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.9rem 1rem 0.9rem 2.75rem;
+      font-family: inherit;
+      font-size: 1rem;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-group input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-group input:focus {
+      border-color: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .form-group input:focus + i,
+    .form-group .input-wrap:focus-within i {
+      color: var(--accent);
+    }
+
+    .form-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .form-options label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .form-options input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .form-options a {
+      font-size: 0.875rem;
+      color: var(--link);
+      text-decoration: none;
+      font-weight: 500;
+      transition: opacity 0.2s;
+      cursor: pointer;
+    }
+
+    .form-options a:hover {
+      opacity: 0.9;
+      text-decoration: underline;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 0.95rem 1.5rem;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      color: #1a1a2e;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      background: #fff;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 1.5rem 0;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--glass-border);
+    }
+
+    .divider span {
+      padding: 0 1rem;
+    }
+
+    .social-buttons {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .btn-social {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .btn-social:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-social:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .social-buttons.unavailable .btn-social {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: auto;
+    }
+    .social-buttons.unavailable .btn-social:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--glass-border);
+    }
+
+    .switch-link {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .switch-link a {
+      color: var(--link);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .switch-link a:hover {
+      text-decoration: underline;
+    }
+
+    /* Logged-in state */
+    .logged-in-view {
+      display: none;
+      text-align: center;
+    }
+
+    .logged-in-view.active {
+      display: block;
+    }
+
+    .logged-in-view .icon-wrap {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 1rem;
+      background: rgba(160, 255, 180, 0.15);
+      border: 1px solid rgba(160, 255, 180, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      color: var(--success);
+    }
+
+    .logged-in-view h2 {
+      font-size: 1.5rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .logged-in-view .user-email {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+
+    .btn-logout {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .auth-forms {
+      display: block;
+    }
+
+    .auth-forms.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-card">
+      <!-- Logged in state -->
+      <div class="logged-in-view" id="loggedInView">
+        <div class="icon-wrap"><i class="fas fa-check-circle"></i></div>
+        <h2>Welcome, <span id="welcomeName"></span></h2>
+        <p class="user-email" id="welcomeEmail"></p>
+        <button type="button" class="btn-logout" id="btnLogout">
+          <i class="fas fa-sign-out-alt"></i> Sign out
+        </button>
+      </div>
+
+      <!-- Login / Sign up forms -->
+      <div class="auth-forms" id="authForms">
+        <header class="login-header">
+          <div class="icon-wrap"><i class="fas fa-user-circle"></i></div>
+          <h1 id="formTitle">Welcome back</h1>
+          <p id="formSubtitle">Sign in to continue to your account</p>
+        </header>
+
+        <div class="tabs">
+          <button type="button" class="tab active" data-tab="login">
+            <i class="fas fa-sign-in-alt"></i> Sign in
+          </button>
+          <button type="button" class="tab" data-tab="signup">
+            <i class="fas fa-user-plus"></i> Sign up
+          </button>
+        </div>
+
+        <div class="message" id="message">
+          <i class="fas fa-info-circle"></i>
+          <span id="messageText"></span>
+        </div>
+
+        <!-- Login panel -->
+        <div class="panel active" id="panelLogin">
+          <form class="login-form" id="loginForm">
+            <div class="form-group">
+              <label for="loginEmail">Email</label>
+              <div class="input-wrap">
+                <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email">
+                <i class="fas fa-envelope"></i>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="loginPassword">Password</label>
+              <div class="input-wrap">
+                <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+                <i class="fas fa-lock"></i>
+              </div>
+            </div>
+            <div class="form-options">
+              <label>
+                <input type="checkbox" id="rememberMe" name="remember">
+                Remember me
+              </label>
+              <a href="#" id="forgotPassword">Forgot password?</a>
+            </div>
+            <button type="submit" class="btn-primary">
+              <i class="fas fa-sign-in-alt"></i> Sign in
+            </button>
+          </form>
+        </div>
+
+        <!-- Sign up panel -->
+        <div class="panel" id="panelSignup">
+          <form class="signup-form" id="signupForm">
+            <div class="form-group">
+              <label for="signupName">Full name</label>
+              <div class="input-wrap">
+                <input type="text" id="signupName" placeholder="Your name" required autocomplete="name">
+                <i class="fas fa-user"></i>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signupEmail">Email</label>
+              <div class="input-wrap">
+                <input type="email" id="signupEmail" placeholder="you@example.com" required autocomplete="email">
+                <i class="fas fa-envelope"></i>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signupPassword">Password</label>
+              <div class="input-wrap">
+                <input type="password" id="signupPassword" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+                <i class="fas fa-lock"></i>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signupConfirm">Confirm password</label>
+              <div class="input-wrap">
+                <input type="password" id="signupConfirm" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+                <i class="fas fa-lock"></i>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">
+              <i class="fas fa-user-plus"></i> Create account
+            </button>
+          </form>
+        </div>
+
+        <div class="divider"><span>or continue with</span></div>
+        <div class="social-buttons">
+          <button type="button" class="btn-social" id="btnGoogle" data-provider="google"><i class="fab fa-google"></i> Google</button>
+          <button type="button" class="btn-social" id="btnGitHub" data-provider="github"><i class="fab fa-github"></i> GitHub</button>
+        </div>
+
+        <p class="switch-link">
+          Don't have an account? <a href="#" id="linkToSignup">Sign up</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase (replace with your project config from Firebase Console) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script>
+    // Firebase config for Google & GitHub sign-in
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyChzpV0PGAgvBlc0a5EbYCiRRkZNz_Xx00",
+      authDomain: "test-d0ff9.firebaseapp.com",
+      projectId: "test-d0ff9",
+      storageBucket: "test-d0ff9.firebasestorage.app",
+      messagingSenderId: "487292105779",
+      appId: "1:487292105779:web:2ad9559cce29e285d5df46",
+      measurementId: "G-C0YXR95Q6V"
+    };
+    let firebaseAuth = null;
+    (function() {
+      var protocol = (typeof location !== 'undefined' && location.protocol) ? location.protocol : '';
+      var supportedProtocol = (protocol === 'https:' || protocol === 'http:' || protocol === 'chrome-extension:');
+      var storageOk = false;
+      try {
+        localStorage.setItem('_fbtest', '1');
+        localStorage.removeItem('_fbtest');
+        storageOk = true;
+      } catch (e) {}
+      if (!supportedProtocol || !storageOk) {
+        return;
+      }
+      try {
+        if (FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+          firebase.initializeApp(FIREBASE_CONFIG);
+          firebaseAuth = firebase.auth();
+        }
+      } catch (e) {
+        console.warn("Firebase init failed:", e);
+      }
+    })();
+  </script>
+  <script>
+    const STORAGE_KEY = 'glass_auth_users';
+    const SESSION_KEY = 'glass_auth_session';
+
+    function getUsers() {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveUsers(users) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    }
+
+    function getSession() {
+      try {
+        return JSON.parse(sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY) || 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    function setSession(user, remember) {
+      const session = { email: user.email, name: user.name, provider: user.provider };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      if (remember) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
+    }
+
+    function showMessage(text, type) {
+      const el = document.getElementById('message');
+      const textEl = document.getElementById('messageText');
+      const icon = el.querySelector('i');
+      el.className = 'message show ' + (type || '');
+      textEl.textContent = text;
+      icon.className = type === 'error' ? 'fas fa-exclamation-circle' : type === 'success' ? 'fas fa-check-circle' : 'fas fa-info-circle';
+    }
+
+    function hideMessage() {
+      document.getElementById('message').classList.remove('show');
+    }
+
+    function showLoggedIn(user) {
+      document.getElementById('authForms').classList.add('hidden');
+      document.getElementById('loggedInView').classList.add('active');
+      document.getElementById('welcomeName').textContent = user.name || user.email.split('@')[0];
+      document.getElementById('welcomeEmail').textContent = user.email;
+    }
+
+    function showAuthForms() {
+      document.getElementById('loggedInView').classList.remove('active');
+      document.getElementById('authForms').classList.remove('hidden');
+      hideMessage();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('.tab[data-tab="' + tab + '"]').classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel' + (tab === 'login' ? 'Login' : 'Signup')).classList.add('active');
+      const title = document.getElementById('formTitle');
+      const subtitle = document.getElementById('formSubtitle');
+      const link = document.getElementById('linkToSignup');
+      if (tab === 'login') {
+        title.textContent = 'Welcome back';
+        subtitle.textContent = 'Sign in to continue to your account';
+        link.textContent = 'Sign up';
+      } else {
+        title.textContent = 'Create account';
+        subtitle.textContent = 'Sign up to get started';
+        link.textContent = 'Sign in';
+      }
+      hideMessage();
+    }
+
+    // Tab buttons
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    document.getElementById('linkToSignup').addEventListener('click', (e) => {
+      e.preventDefault();
+      const onLogin = document.getElementById('panelLogin').classList.contains('active');
+      switchTab(onLogin ? 'signup' : 'login');
+    });
+
+    // Login form
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      hideMessage();
+      const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+      const password = document.getElementById('loginPassword').value;
+      const remember = document.getElementById('rememberMe').checked;
+      const users = getUsers();
+      const user = users[email];
+      if (!user) {
+        showMessage('No account found with this email.', 'error');
+        return;
+      }
+      if (user.password !== password) {
+        showMessage('Incorrect password.', 'error');
+        return;
+      }
+      setSession(user, remember);
+      showMessage('Signed in successfully.', 'success');
+      setTimeout(() => {
+        showLoggedIn(user);
+        document.getElementById('loginForm').reset();
+      }, 600);
+    });
+
+    // Sign up form
+    document.getElementById('signupForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      hideMessage();
+      const name = document.getElementById('signupName').value.trim();
+      const email = document.getElementById('signupEmail').value.trim().toLowerCase();
+      const password = document.getElementById('signupPassword').value;
+      const confirm = document.getElementById('signupConfirm').value;
+      if (password !== confirm) {
+        showMessage('Passwords do not match.', 'error');
+        return;
+      }
+      if (password.length < 6) {
+        showMessage('Password must be at least 6 characters.', 'error');
+        return;
+      }
+      const users = getUsers();
+      if (users[email]) {
+        showMessage('An account with this email already exists.', 'error');
+        return;
+      }
+      const user = { name, email, password };
+      users[email] = user;
+      saveUsers(users);
+      setSession(user, true);
+      showMessage('Account created. You are signed in.', 'success');
+      setTimeout(() => {
+        showLoggedIn(user);
+        document.getElementById('signupForm').reset();
+        switchTab('login');
+      }, 600);
+    });
+
+    // Logout
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      clearSession();
+      showAuthForms();
+      switchTab('login');
+    });
+
+    // Forgot password (simple: show message)
+    document.getElementById('forgotPassword').addEventListener('click', (e) => {
+      e.preventDefault();
+      showMessage('Use the same password you set when signing up. No reset available in this demo.', 'error');
+    });
+
+    // ----- Google & GitHub sign-in (Firebase) -----
+    function userFromFirebaseUser(fbUser, provider) {
+      return {
+        name: fbUser.displayName || fbUser.email.split('@')[0] || 'User',
+        email: (fbUser.email || '').toLowerCase(),
+        provider: provider
+      };
+    }
+
+    function handleSocialUser(user) {
+      const users = getUsers();
+      users[user.email] = user;
+      saveUsers(users);
+      setSession(user, true);
+      showMessage('Signed in with ' + (user.provider === 'google' ? 'Google' : 'GitHub') + '.', 'success');
+      setTimeout(() => {
+        showLoggedIn(user);
+        hideMessage();
+      }, 500);
+    }
+
+    function socialSignIn(providerName) {
+      if (!firebaseAuth) {
+        showMessage('Google & GitHub sign-in only work in a browser (https). Here please use email/password, or open this page in Chrome/Firefox to use Google/GitHub.', 'error');
+        return;
+      }
+      hideMessage();
+      const btnGoogle = document.getElementById('btnGoogle');
+      const btnGitHub = document.getElementById('btnGitHub');
+      const btn = providerName === 'google' ? btnGoogle : btnGitHub;
+      btn.disabled = true;
+      const provider = providerName === 'google'
+        ? new firebase.auth.GoogleAuthProvider()
+        : new firebase.auth.GithubAuthProvider();
+      firebaseAuth.signInWithPopup(provider)
+        .then(function(result) {
+          const user = userFromFirebaseUser(result.user, providerName);
+          handleSocialUser(user);
+        })
+        .catch(function(err) {
+          btn.disabled = false;
+          if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+          showMessage(err.message || 'Sign-in failed. Try again.', 'error');
+        })
+        .then(function() { btn.disabled = false; });
+    }
+
+    document.getElementById('btnGoogle').addEventListener('click', () => socialSignIn('google'));
+    document.getElementById('btnGitHub').addEventListener('click', () => socialSignIn('github'));
+
+    // Restore Firebase session on load and sync logout
+    if (firebaseAuth) {
+      firebaseAuth.onAuthStateChanged(function(fbUser) {
+        if (fbUser) {
+          const provider = (fbUser.providerData && fbUser.providerData[0] && fbUser.providerData[0].providerId) || '';
+          const providerName = provider.includes('google') ? 'google' : provider.includes('github') ? 'github' : 'google';
+          const user = userFromFirebaseUser(fbUser, providerName);
+          setSession(user, true);
+          const users = getUsers();
+          users[user.email] = user;
+          saveUsers(users);
+          showLoggedIn(user);
+        } else {
+          var session = getSession();
+          if (session && session.provider) {
+            clearSession();
+            showAuthForms();
+          }
+        }
+      });
+    }
+
+    // Logout: also sign out from Firebase if user signed in with Google/GitHub
+    document.getElementById('btnLogout').addEventListener('click', function() {
+      const session = getSession();
+      if (firebaseAuth && session && session.provider) {
+        firebaseAuth.signOut();
+      }
+    }, true);
+
+    // Check existing session on load (email/password users when Firebase not used or not signed in)
+    (function init() {
+      var sb = document.querySelector('.social-buttons');
+      if (sb && !firebaseAuth) sb.classList.add('unavailable');
+      if (firebaseAuth && firebaseAuth.currentUser) return;
+      const session = getSession();
+      if (session) {
+        const users = getUsers();
+        const user = users[session.email];
+        if (user) showLoggedIn(user);
+      }
+    })();
+  </script>
+</body>
+</html>
